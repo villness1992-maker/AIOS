@@ -1,0 +1,1305 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>讯飞城市 AIOS - Agent团队协作模式</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Alpine.js for interactivity -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* ========== UI 设计规范（统一间距、字体、圆角） ==========
+         * 间距：页面 px-6 py-6；区块间距 gap-5 / space-y-5；列表项 py-2.5 px-4；卡片 p-4
+         * 字体：页面标题 text-xl font-semibold；区块标题 text-base font-semibold；卡片/列表标题 text-sm font-medium；正文 text-sm；辅助 text-xs
+         * 颜色：主文案 slate-800，次要 slate-600，辅助 slate-500；主按钮 blue-600；边框 gray-200
+         * 圆角：按钮/输入 rounded-lg；卡片/面板 rounded-xl；标签 rounded-full
+         */
+        /* 自定义滚动条 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        .typing-cursor::after {
+            content: '|';
+            animation: blink 1s step-start infinite;
+        }
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+        @keyframes pulse-ring {
+            0% { transform: scale(0.8); opacity: 0.5; }
+            100% { transform: scale(2); opacity: 0; }
+        }
+        .animate-pulse-ring {
+            animation: pulse-ring 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes flow-line {
+            0% { stroke-dashoffset: 20; }
+            100% { stroke-dashoffset: 0; }
+        }
+        .animate-flow {
+            animation: flow-line 1s linear infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .typing-cursor::after { animation: none; opacity: 1; }
+            .animate-spin { animation: none; }
+            .animate-ping { animation: none; }
+            .animate-pulse-ring { animation: none; }
+        }
+        /* Focus visible: never outline-none without replacement */
+        .focus-ring:focus-visible {
+            outline: 2px solid #2563eb;
+            outline-offset: 2px;
+        }
+        button:focus-visible, [role="button"]:focus-visible, a:focus-visible {
+            outline: 2px solid #2563eb;
+            outline-offset: 2px;
+        }
+        /* Touch: prevent double-tap zoom delay */
+        button, [role="button"], a { touch-action: manipulation; }
+        .overscroll-contain { overscroll-behavior: contain; }
+        .tabular-nums { font-variant-numeric: tabular-nums; }
+        .skip-link {
+            position: absolute;
+            left: -9999px;
+            z-index: 100;
+        }
+        .skip-link:focus {
+            left: 1rem;
+            top: 1rem;
+            padding: 0.5rem 1rem;
+            background: #2563eb;
+            color: white;
+            border-radius: 0.5rem;
+            outline: 2px solid #2563eb;
+            outline-offset: 2px;
+        }
+        [x-cloak] { display: none !important; }
+
+        /* ========== Agent团队协作模式 - 新增样式 ========== */
+        .agent-status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .agent-status-waiting { background-color: #f59e0b; }
+        .agent-status-running { background-color: #3b82f6; }
+        .agent-status-completed { background-color: #22c55e; }
+        .agent-status-error { background-color: #ef4444; }
+        .agent-status-thinking { background-color: #a855f7; }
+
+        .network-node {
+            transition: all 0.3s ease;
+        }
+        .network-node:hover {
+            transform: scale(1.1);
+        }
+        .network-line {
+            stroke-dasharray: 5;
+            animation: dash 20s linear infinite;
+        }
+        @keyframes dash {
+            to { stroke-dashoffset: -100; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-slate-800 font-sans antialiased h-screen flex overflow-hidden" x-data="agentTeamApp()">
+    <a href="#main-content" class="skip-link">跳至主内容</a>
+
+    <!-- Sidebar -->
+    <aside class="bg-gray-50 border-r border-gray-200 flex flex-col transition-[width] duration-300 h-full relative"
+           :class="[sidebarOpen ? 'w-64' : 'w-16', showHistoryPopover ? 'z-50' : 'z-auto']">
+
+        <!-- 品牌区 -->
+        <div class="h-14 flex-shrink-0 flex items-center px-3 gap-2"
+             :class="sidebarOpen ? 'justify-between' : 'flex-col justify-center gap-1'">
+            <div class="flex items-center min-w-0 gap-2" x-show="sidebarOpen">
+                <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold flex-shrink-0 shadow-sm">
+                    AI
+                </div>
+                <span class="ml-2 font-semibold text-lg text-slate-800 tracking-tight truncate">讯飞城市 AIOS</span>
+            </div>
+            <button type="button" @click="sidebarOpen = !sidebarOpen" aria-label="展开或收起侧边栏" aria-expanded="sidebarOpen"
+                    class="flex-shrink-0 p-1.5 text-slate-500 hover:text-slate-700 hover:bg-gray-200 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                <i data-lucide="panel-left" class="w-5 h-5" aria-hidden="true"></i>
+            </button>
+        </div>
+
+        <!-- 主操作：新建任务 -->
+        <div class="px-3 mt-3 mb-3" :class="sidebarOpen ? '' : 'flex justify-center'">
+            <button type="button" @click="currentTab = 'chat'; resetChat();"
+                    aria-label="新建任务"
+                    class="w-full flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl shadow-sm transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                    :class="sidebarOpen ? 'py-2.5 px-4' : 'w-10 h-10 p-0'">
+                <i data-lucide="pen-square" class="flex-shrink-0" :class="sidebarOpen ? 'w-4 h-4 mr-2' : 'w-5 h-5'" aria-hidden="true"></i>
+                <span x-show="sidebarOpen">新建任务</span>
+            </button>
+        </div>
+
+        <!-- 一级导航 -->
+        <nav class="px-3 space-y-0.5 flex-shrink-0">
+            <button type="button" @click="currentTab = 'chat'" aria-label="对话"
+                    class="w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                    :class="currentTab === 'chat' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:bg-gray-100'">
+                <i data-lucide="message-square" class="w-4 h-4 flex-shrink-0" aria-hidden="true"></i>
+                <span class="ml-3 truncate min-w-0" x-show="sidebarOpen">对话</span>
+            </button>
+            <button type="button" @click="currentTab = 'agents'" aria-label="智能体"
+                    class="w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                    :class="currentTab === 'agents' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:bg-gray-100'">
+                <i data-lucide="bot" class="w-4 h-4 flex-shrink-0" aria-hidden="true"></i>
+                <span class="ml-3 truncate min-w-0" x-show="sidebarOpen">智能体</span>
+            </button>
+            <button type="button" @click="currentTab = 'team-collab'" aria-label="团队协作"
+                    class="w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                    :class="currentTab === 'team-collab' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:bg-gray-100'">
+                <i data-lucide="users" class="w-4 h-4 flex-shrink-0" aria-hidden="true"></i>
+                <span class="ml-3 truncate min-w-0" x-show="sidebarOpen">团队协作</span>
+                <span x-show="sidebarOpen && activeTeamCollab" class="ml-auto w-2 h-2 bg-blue-500 rounded-full"></span>
+            </button>
+            <button type="button" @click="currentTab = 'skills'" aria-label="技能"
+                    class="w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                    :class="currentTab === 'skills' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:bg-gray-100'">
+                <i data-lucide="library" class="w-4 h-4 flex-shrink-0" aria-hidden="true"></i>
+                <span class="ml-3 truncate min-w-0" x-show="sidebarOpen">技能</span>
+            </button>
+            <button type="button" @click="currentTab = 'tools'" aria-label="工具"
+                    class="w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                    :class="currentTab === 'tools' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:bg-gray-100'">
+                <i data-lucide="wrench" class="w-4 h-4 flex-shrink-0" aria-hidden="true"></i>
+                <span class="ml-3 truncate min-w-0" x-show="sidebarOpen">工具</span>
+            </button>
+        </nav>
+
+        <!-- 历史会话 -->
+        <div class="flex-1 flex flex-col min-h-0 mt-3 relative"
+             :class="sidebarOpen ? 'overflow-hidden' : 'overflow-visible'">
+            <template x-if="sidebarOpen">
+                <div class="flex flex-col h-full min-h-0">
+                    <div class="px-3 flex items-center justify-between flex-shrink-0">
+                        <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">历史会话</span>
+                    </div>
+                    <div class="px-3 mt-1.5 flex-shrink-0">
+                        <label for="history-search" class="sr-only">搜索对话</label>
+                        <input id="history-search" type="search" x-model="historySearch" placeholder="搜索对话…" aria-label="搜索对话"
+                               class="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    </div>
+                    <div class="flex-1 overflow-y-auto min-h-0 mt-1 px-1 space-y-0.5">
+                        <template x-for="item in filteredHistoryList" :key="item.id">
+                            <div class="group flex items-center rounded-lg transition-colors"
+                                 :class="currentTab === 'chat' && selectedHistoryId === item.id ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:bg-gray-100'">
+                                <button type="button" @click="loadHistory(item)" class="flex-1 min-w-0 flex items-center px-3 py-2 text-sm text-left">
+                                    <i data-lucide="message-square" class="w-4 h-4 flex-shrink-0 mr-2 text-slate-400" aria-hidden="true"></i>
+                                    <span x-show="item.pinned" class="flex-shrink-0 mr-1 text-amber-500" aria-label="已置顶"><i data-lucide="pin" class="w-3.5 h-3.5" aria-hidden="true"></i></span>
+                                    <span class="truncate" x-text="item.title"></span>
+                                </button>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- 底部：用户 -->
+        <div class="border-t border-gray-200 flex-shrink-0 p-3">
+            <button type="button" @click="currentTab = 'settings'" aria-label="用户与设置" class="w-full flex items-center p-2 rounded-lg hover:bg-gray-100 transition-colors text-left focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                <img class="h-8 w-8 rounded-full bg-blue-100 border border-blue-200 flex-shrink-0" src="https://ui-avatars.com/api/?name=Admin&background=0D8ABC&color=fff" alt="政务管理员头像" width="32" height="32">
+                <div class="ml-3 overflow-hidden" x-show="sidebarOpen">
+                    <p class="text-sm font-medium text-slate-700 truncate">政务管理员</p>
+                    <div class="flex items-center text-xs text-slate-500">
+                        <span class="truncate">免费版</span>
+                        <span class="mx-1">•</span>
+                        <span class="text-blue-600">升级</span>
+                    </div>
+                </div>
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main id="main-content" class="flex-1 flex flex-col min-h-0 overflow-hidden bg-white relative" tabindex="-1">
+        <h1 class="sr-only">讯飞城市 AIOS - Agent团队协作模式</h1>
+
+        <!-- ========== 模式选择入口 ========== -->
+        <!-- 在对话界面添加协作模式触发入口 -->
+
+        <!-- View: Chat -->
+        <div x-show="currentTab === 'chat'" class="flex-1 flex flex-col overflow-hidden relative">
+
+            <!-- Messages Area -->
+            <div class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden py-4 px-4 md:px-6">
+                <div class="mx-auto max-w-4xl space-y-6">
+                    <!-- 默认首页 -->
+                    <div x-show="!hasMessages" class="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] text-center px-4">
+                        <div class="w-full max-w-2xl">
+                            <h2 class="text-2xl md:text-3xl font-semibold text-slate-800 mb-8">我能为你做什么？</h2>
+                            <div class="w-full max-w-2xl mx-auto relative">
+                                <div class="bg-white border border-gray-200 rounded-xl shadow-lg flex flex-col focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent transition-all">
+                                    <!-- @ 智能体/技能 标签 + 输入 -->
+                                    <div class="flex flex-wrap items-baseline gap-2 p-4 pb-0 min-h-[2.5rem]">
+                                        <template x-for="mention in selectedMentions" :key="mention.id">
+                                            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-sm font-medium border max-w-[12rem]"
+                                                  :class="mention.type === 'agent' ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-blue-600 text-white border-blue-500'">
+                                                <i data-lucide="bot" class="w-3.5 h-3.5 flex-shrink-0" :class="mention.type === 'agent' ? 'text-indigo-200' : 'text-blue-200'" aria-hidden="true"></i>
+                                                <span class="truncate" x-text="mention.name"></span>
+                                                <button type="button" @click="removeMention(mention.id)" aria-label="取消指定" class="flex-shrink-0 p-0.5 rounded-full hover:bg-white/20">
+                                                    <i data-lucide="x" class="w-3.5 h-3.5" aria-hidden="true"></i>
+                                                </button>
+                                            </span>
+                                        </template>
+                                        <textarea x-model="chatInput" rows="2" placeholder="输入问题或指令，使用 @ 选择智能体，输入 /team 启动团队协作"
+                                            @keydown="handleChatKeydown($event)"
+                                            class="flex-1 min-w-[12rem] bg-transparent border-none focus:ring-0 focus-visible:outline-none resize-none py-1 text-sm placeholder-slate-400 align-baseline"></textarea>
+                                    </div>
+                                    <div class="flex justify-between items-center px-3 pb-3">
+                                        <div class="flex items-center gap-1">
+                                            <button type="button" @click="showMentionPanel = true" aria-label="选择智能体" class="p-2 rounded-lg transition-colors"
+                                                :class="showMentionPanel ? 'text-blue-600 bg-blue-50' : 'text-slate-400 hover:text-blue-600 hover:bg-blue-50'">
+                                                <i data-lucide="at-sign" class="w-4 h-4" aria-hidden="true"></i>
+                                            </button>
+                                            <!-- ========== 协作按钮入口 ========== -->
+                                            <button type="button" @click="openTeamModeSelector()" aria-label="启动团队协作" class="p-2 rounded-lg transition-colors relative"
+                                                :class="showTeamModeSelector ? 'text-blue-600 bg-blue-50' : 'text-slate-400 hover:text-blue-600 hover:bg-blue-50'">
+                                                <i data-lucide="users" class="w-4 h-4" aria-hidden="true"></i>
+                                                <span class="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full"></span>
+                                            </button>
+                                            <button type="button" @click="showQuickCommands = true" aria-label="快捷指令" class="p-2 rounded-lg transition-colors"
+                                                :class="showQuickCommands ? 'text-blue-600 bg-blue-50' : 'text-slate-400 hover:text-blue-600 hover:bg-blue-50'">
+                                                <span class="text-xs font-medium">/</span>
+                                            </button>
+                                        </div>
+                                        <button type="button" @click="sendMessage()" aria-label="发送" class="bg-slate-800 text-white rounded-full p-2 hover:bg-blue-600 transition-colors">
+                                            <i data-lucide="arrow-up" class="w-4 h-4" aria-hidden="true"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- 快捷指令面板 -->
+                                <div x-show="showQuickCommands" x-cloak @click.outside="showQuickCommands = false" class="absolute bottom-full left-0 mt-2 z-50 w-full max-w-sm bg-white rounded-xl border border-gray-200 shadow-xl overflow-hidden">
+                                    <div class="px-4 py-3 border-b border-gray-100">
+                                        <h3 class="text-sm font-semibold text-slate-800">快捷指令</h3>
+                                    </div>
+                                    <div class="py-2">
+                                        <button type="button" @click="selectQuickCommand('/team 数据分析小组')" class="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-50">
+                                            <div class="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600">
+                                                <i data-lucide="users" class="w-4 h-4"></i>
+                                            </div>
+                                            <div>
+                                                <p class="text-sm font-medium text-slate-800">/team 数据分析小组</p>
+                                                <p class="text-xs text-slate-500">快速启动数据分析团队协作</p>
+                                            </div>
+                                        </button>
+                                        <button type="button" @click="selectQuickCommand('/team 文档编写小组')" class="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-50">
+                                            <div class="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center text-green-600">
+                                                <i data-lucide="file-text" class="w-4 h-4"></i>
+                                            </div>
+                                            <div>
+                                                <p class="text-sm font-medium text-slate-800">/team 文档编写小组</p>
+                                                <p class="text-xs text-slate-500">快速启动文档编写团队协作</p>
+                                            </div>
+                                        </button>
+                                        <button type="button" @click="selectQuickCommand('/dynamic 开发团队')" class="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-50">
+                                            <div class="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center text-purple-600">
+                                                <i data-lucide="sparkles" class="w-4 h-4"></i>
+                                            </div>
+                                            <div>
+                                                <p class="text-sm font-medium text-slate-800">/dynamic 开发团队</p>
+                                                <p class="text-xs text-slate-500">动态生成开发协作团队</p>
+                                            </div>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 快捷入口卡片 -->
+                            <div class="grid grid-cols-2 gap-3 mt-6 max-w-2xl mx-auto">
+                                <button @click="openTeamModeSelector()" class="p-4 bg-white border border-gray-200 rounded-xl hover:border-blue-300 hover:shadow-md transition-all text-left">
+                                    <div class="flex items-center gap-3 mb-2">
+                                        <div class="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600">
+                                            <i data-lucide="users" class="w-5 h-5"></i>
+                                        </div>
+                                        <span class="font-medium text-slate-800">Agent团队协作</span>
+                                    </div>
+                                    <p class="text-sm text-slate-500">多Agent协同完成复杂任务</p>
+                                </button>
+                                <button @click="showMentionPanel = true" class="p-4 bg-white border border-gray-200 rounded-xl hover:border-blue-300 hover:shadow-md transition-all text-left">
+                                    <div class="flex items-center gap-3 mb-2">
+                                        <div class="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600">
+                                            <i data-lucide="bot" class="w-5 h-5"></i>
+                                        </div>
+                                        <span class="font-medium text-slate-800">@ 提及智能体</span>
+                                    </div>
+                                    <p class="text-sm text-slate-500">快速调用特定智能体</p>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 对话消息列表 -->
+                    <template x-for="(msg, index) in messages" :key="index">
+                        <div class="flex gap-4" :class="msg.role === 'user' ? 'flex-row-reverse' : ''">
+                            <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                                 :class="msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-indigo-100 text-indigo-600'">
+                                <i data-lucide="user" x-show="msg.role === 'user'" class="w-4 h-4"></i>
+                                <i data-lucide="bot" x-show="msg.role === 'assistant'" class="w-4 h-4"></i>
+                            </div>
+                            <div class="max-w-[80%]" :class="msg.role === 'user' ? 'text-right' : ''">
+                                <div class="inline-block px-4 py-2.5 rounded-2xl text-left"
+                                     :class="msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-slate-800'">
+                                    <p class="text-sm" x-text="msg.content"></p>
+                                </div>
+                                <p class="text-xs text-slate-400 mt-1" x-text="msg.time"></p>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- 协作模式触发提示卡片 -->
+                    <div x-show="showCollabSuggestion" x-cloak class="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                        <div class="flex items-start gap-3">
+                            <div class="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600 flex-shrink-0">
+                                <i data-lucide="users" class="w-5 h-5"></i>
+                            </div>
+                            <div class="flex-1">
+                                <h3 class="font-medium text-slate-800 mb-1">检测到复杂任务，建议启用Agent团队协作</h3>
+                                <p class="text-sm text-slate-600 mb-3">该任务涉及多个专业领域，使用多Agent协作可提升效率和质量</p>
+                                <div class="flex gap-2">
+                                    <button @click="openTeamModeSelector()" class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">
+                                        启动协作
+                                    </button>
+                                    <button @click="showCollabSuggestion = false" class="px-4 py-2 text-slate-600 text-sm hover:bg-blue-100 rounded-lg">
+                                        继续单Agent
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== 模式选择弹窗 ========== -->
+        <div x-show="showTeamModeSelector" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="showTeamModeSelector = false">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden" @click.stop>
+                <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                    <h2 class="text-xl font-semibold text-slate-800">选择协作模式</h2>
+                    <button @click="showTeamModeSelector = false" class="p-2 text-slate-400 hover:text-slate-600 rounded-lg">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+                <div class="p-6">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <!-- 模式1：预创建Agent协同 -->
+                        <button @click="selectTeamMode(1)" class="p-5 border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all text-left group">
+                            <div class="flex items-center gap-3 mb-3">
+                                <div class="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                    <i data-lucide="users" class="w-6 h-6"></i>
+                                </div>
+                                <div>
+                                    <h3 class="font-semibold text-slate-800">模式1</h3>
+                                    <p class="text-sm text-slate-500">预创建Agent协同</p>
+                                </div>
+                            </div>
+                            <p class="text-sm text-slate-600 mb-3">使用已创建的数字员工Agent组成团队，分工协作后向主Agent汇报</p>
+                            <div class="flex flex-wrap gap-2">
+                                <span class="px-2 py-1 bg-gray-100 text-xs text-slate-600 rounded-full">固定团队</span>
+                                <span class="px-2 py-1 bg-gray-100 text-xs text-slate-600 rounded-full">层级汇报</span>
+                                <span class="px-2 py-1 bg-gray-100 text-xs text-slate-600 rounded-full">可复用</span>
+                            </div>
+                        </button>
+
+                        <!-- 模式2：动态Agent协作 -->
+                        <button @click="selectTeamMode(2)" class="p-5 border-2 border-gray-200 rounded-xl hover:border-purple-500 hover:bg-purple-50 transition-all text-left group">
+                            <div class="flex items-center gap-3 mb-3">
+                                <div class="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600 group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                                    <i data-lucide="sparkles" class="w-6 h-6"></i>
+                                </div>
+                                <div>
+                                    <h3 class="font-semibold text-slate-800">模式2</h3>
+                                    <p class="text-sm text-slate-500">动态Agent协作</p>
+                                </div>
+                            </div>
+                            <p class="text-sm text-slate-600 mb-3">根据任务动态生成临时Agent，Agent间可直接通信协作</p>
+                            <div class="flex flex-wrap gap-2">
+                                <span class="px-2 py-1 bg-gray-100 text-xs text-slate-600 rounded-full">会话级</span>
+                                <span class="px-2 py-1 bg-gray-100 text-xs text-slate-600 rounded-full">点对点通信</span>
+                                <span class="px-2 py-1 bg-gray-100 text-xs text-slate-600 rounded-full">自适应</span>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== 模式1界面组件：预创建Agent协同 ========== -->
+        <div x-show="currentTab === 'team-mode1'" x-cloak class="flex-1 flex flex-col overflow-hidden">
+            <!-- 顶部导航栏 -->
+            <div class="h-14 border-b border-gray-200 flex items-center justify-between px-6 bg-white flex-shrink-0">
+                <div class="flex items-center gap-3">
+                    <button @click="currentTab = 'chat'" class="p-2 text-slate-400 hover:text-slate-600 rounded-lg">
+                        <i data-lucide="arrow-left" class="w-5 h-5"></i>
+                    </button>
+                    <div class="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600">
+                        <i data-lucide="users" class="w-4 h-4"></i>
+                    </div>
+                    <div>
+                        <h2 class="font-semibold text-slate-800">预创建Agent协同</h2>
+                        <p class="text-xs text-slate-500">数据分析小组 - 任务执行中</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button @click="showAgentSelectPanel = true" class="px-3 py-1.5 text-sm text-slate-600 hover:bg-gray-100 rounded-lg flex items-center gap-2">
+                        <i data-lucide="settings" class="w-4 h-4"></i>
+                        配置团队
+                    </button>
+                    <button @click="pauseCollaboration()" class="px-3 py-1.5 text-sm text-amber-600 hover:bg-amber-50 rounded-lg flex items-center gap-2">
+                        <i data-lucide="pause" class="w-4 h-4"></i>
+                        暂停
+                    </button>
+                </div>
+            </div>
+
+            <!-- 主内容区 -->
+            <div class="flex-1 flex overflow-hidden">
+                <!-- 左侧：Agent选择与分工配置 -->
+                <div class="w-80 border-r border-gray-200 bg-gray-50 flex flex-col">
+                    <!-- Agent选择面板 -->
+                    <div class="p-4 border-b border-gray-200">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="font-semibold text-slate-800">参与Agent</h3>
+                            <button @click="showAgentSelectPanel = true" class="text-sm text-blue-600 hover:text-blue-700">
+                                + 添加
+                            </button>
+                        </div>
+                        <div class="space-y-2">
+                            <template x-for="agent in selectedAgents" :key="agent.id">
+                                <div class="flex items-center gap-3 p-2 bg-white rounded-lg border border-gray-200">
+                                    <div class="w-8 h-8 rounded-lg flex items-center justify-center"
+                                         :class="agent.iconBg">
+                                        <i data-lucide="bot" class="w-4 h-4" :class="agent.iconColor"></i>
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <p class="text-sm font-medium text-slate-800 truncate" x-text="agent.name"></p>
+                                        <p class="text-xs text-slate-500 truncate" x-text="agent.role"></p>
+                                    </div>
+                                    <!-- Agent状态标签 -->
+                                    <span class="px-2 py-0.5 text-xs rounded-full"
+                                          :class="getAgentStatusClass(agent.status)"
+                                          x-text="getAgentStatusText(agent.status)"></span>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- 分工配置区 -->
+                    <div class="flex-1 p-4 overflow-y-auto">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="font-semibold text-slate-800">任务分工</h3>
+                            <div class="flex gap-1">
+                                <button @click="autoAssignTasks()" class="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200">
+                                    自动分配
+                                </button>
+                            </div>
+                        </div>
+                        <div class="space-y-2">
+                            <template x-for="(task, index) in mode1Tasks" :key="index">
+                                <div class="p-3 bg-white rounded-lg border border-gray-200">
+                                    <div class="flex items-start gap-2">
+                                        <span class="w-5 h-5 rounded-full bg-gray-100 text-xs flex items-center justify-center text-slate-600 flex-shrink-0" x-text="index + 1"></span>
+                                        <div class="flex-1 min-w-0">
+                                            <p class="text-sm font-medium text-slate-800" x-text="task.name"></p>
+                                            <p class="text-xs text-slate-500 mt-0.5" x-text="task.description"></p>
+                                            <div class="flex items-center gap-2 mt-2">
+                                                <span class="text-xs text-slate-400">分配给:</span>
+                                                <select x-model="task.assignedAgent" class="text-xs border border-gray-200 rounded px-2 py-1 bg-white">
+                                                    <option value="">选择Agent</option>
+                                                    <template x-for="agent in selectedAgents" :key="agent.id">
+                                                        <option :value="agent.id" x-text="agent.name"></option>
+                                                    </template>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 中间：协作状态看板 -->
+                <div class="flex-1 flex flex-col bg-white">
+                    <div class="p-4 border-b border-gray-200">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="font-semibold text-slate-800">协作状态看板</h3>
+                            <!-- 进度指示器 -->
+                            <div class="flex items-center gap-3">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                        <div class="h-full bg-blue-600 rounded-full transition-all duration-500"
+                                             :style="`width: ${mode1Progress}%`"></div>
+                                    </div>
+                                    <span class="text-sm text-slate-600" x-text="`${mode1Progress}%`"></span>
+                                </div>
+                                <span class="text-xs text-slate-500" x-text="`预计剩余 ${mode1RemainingTime}`"></span>
+                            </div>
+                        </div>
+
+                        <!-- 时间轴视图 -->
+                        <div class="bg-gray-50 rounded-xl p-4">
+                            <div class="flex items-center justify-between text-xs text-slate-500 mb-2">
+                                <span>10:30</span>
+                                <span>10:35</span>
+                                <span>10:40</span>
+                                <span>10:45</span>
+                                <span>10:50</span>
+                            </div>
+                            <div class="space-y-2">
+                                <template x-for="agent in selectedAgents" :key="agent.id">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-24 text-xs text-slate-600 truncate" x-text="agent.name"></div>
+                                        <div class="flex-1 h-6 bg-gray-200 rounded relative overflow-hidden">
+                                            <div class="absolute h-full rounded transition-all duration-500"
+                                                 :class="getAgentTimelineColor(agent.status)"
+                                                 :style="getAgentTimelineStyle(agent)"></div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Agent状态列表 -->
+                    <div class="flex-1 overflow-y-auto p-4">
+                        <div class="space-y-3">
+                            <template x-for="agent in selectedAgents" :key="agent.id">
+                                <div class="p-4 border border-gray-200 rounded-xl hover:border-blue-300 transition-colors"
+                                     :class="agent.status === 'running' ? 'bg-blue-50 border-blue-200' : ''">
+                                    <div class="flex items-start gap-3">
+                                        <div class="relative">
+                                            <div class="w-10 h-10 rounded-xl flex items-center justify-center"
+                                                 :class="agent.iconBg">
+                                                <i data-lucide="bot" class="w-5 h-5" :class="agent.iconColor"></i>
+                                            </div>
+                                            <!-- 状态指示器 -->
+                                            <div class="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white"
+                                                 :class="getAgentStatusDotColor(agent.status)"></div>
+                                        </div>
+                                        <div class="flex-1">
+                                            <div class="flex items-center justify-between">
+                                                <h4 class="font-medium text-slate-800" x-text="agent.name"></h4>
+                                                <span class="text-xs text-slate-500" x-text="agent.timeInfo"></span>
+                                            </div>
+                                            <p class="text-sm text-slate-600 mt-1" x-text="agent.currentTask"></p>
+                                            <div class="flex items-center gap-2 mt-2">
+                                                <button class="text-xs text-blue-600 hover:underline">查看日志</button>
+                                                <button x-show="agent.status === 'running'" class="text-xs text-amber-600 hover:underline">暂停</button>
+                                                <button x-show="agent.status === 'error'" class="text-xs text-red-600 hover:underline">重试</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右侧：结果汇总区 -->
+                <div class="w-80 border-l border-gray-200 bg-gray-50 flex flex-col">
+                    <div class="p-4 border-b border-gray-200">
+                        <h3 class="font-semibold text-slate-800">结果汇总</h3>
+                    </div>
+                    <div class="flex-1 overflow-y-auto p-4">
+                        <div class="space-y-3">
+                            <!-- 执行摘要 -->
+                            <div class="p-3 bg-white rounded-lg border border-gray-200">
+                                <h4 class="text-sm font-medium text-slate-800 mb-2">执行摘要</h4>
+                                <div class="space-y-1 text-xs text-slate-600">
+                                    <p>• 任务完成时间: <span x-text="mode1Summary.completeTime"></span></p>
+                                    <p>• 总耗时: <span x-text="mode1Summary.totalTime"></span></p>
+                                    <p>• 参与Agent: <span x-text="mode1Summary.agentCount"></span>个</p>
+                                    <p>• 子任务: <span x-text="mode1Summary.taskCount"></span>个</p>
+                                </div>
+                            </div>
+
+                            <!-- 各Agent输出 -->
+                            <template x-for="output in mode1Results" :key="output.agentId">
+                                <div class="p-3 bg-white rounded-lg border border-gray-200">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <div class="w-6 h-6 rounded-lg flex items-center justify-center" :class="output.iconBg">
+                                            <i data-lucide="bot" class="w-3 h-3" :class="output.iconColor"></i>
+                                        </div>
+                                        <span class="text-sm font-medium text-slate-800" x-text="output.agentName"></span>
+                                    </div>
+                                    <p class="text-xs text-slate-600 line-clamp-3" x-text="output.summary"></p>
+                                    <div class="flex items-center gap-2 mt-2">
+                                        <button class="text-xs text-blue-600 hover:underline">查看详细</button>
+                                        <button class="text-xs text-slate-400 hover:text-slate-600">下载</button>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <!-- 整合输出 -->
+                            <div class="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <i data-lucide="file-text" class="w-4 h-4 text-blue-600"></i>
+                                    <span class="text-sm font-medium text-slate-800">综合报告</span>
+                                </div>
+                                <p class="text-xs text-slate-600" x-text="mode1FinalReport.summary"></p>
+                                <div class="flex gap-2 mt-2">
+                                    <button class="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700">下载</button>
+                                    <button class="px-2 py-1 text-xs border border-blue-300 text-blue-600 rounded hover:bg-blue-100">预览</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== 模式2界面组件：动态Agent协作 ========== -->
+        <div x-show="currentTab === 'team-mode2'" x-cloak class="flex-1 flex flex-col overflow-hidden">
+            <!-- 顶部导航栏 -->
+            <div class="h-14 border-b border-gray-200 flex items-center justify-between px-6 bg-white flex-shrink-0">
+                <div class="flex items-center gap-3">
+                    <button @click="currentTab = 'chat'" class="p-2 text-slate-400 hover:text-slate-600 rounded-lg">
+                        <i data-lucide="arrow-left" class="w-5 h-5"></i>
+                    </button>
+                    <div class="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center text-purple-600">
+                        <i data-lucide="sparkles" class="w-4 h-4"></i>
+                    </div>
+                    <div>
+                        <h2 class="font-semibold text-slate-800">动态Agent协作</h2>
+                        <p class="text-xs text-slate-500">电商系统开发团队 - 会话级</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded-full">动态生成</span>
+                    <button @click="showDynamicAgentConfig = true" class="px-3 py-1.5 text-sm text-slate-600 hover:bg-gray-100 rounded-lg flex items-center gap-2">
+                        <i data-lucide="settings" class="w-4 h-4"></i>
+                        配置
+                    </button>
+                </div>
+            </div>
+
+            <!-- 主内容区 -->
+            <div class="flex-1 flex overflow-hidden">
+                <!-- 左侧：动态Agent生成展示 -->
+                <div class="w-72 border-r border-gray-200 bg-gray-50 flex flex-col">
+                    <div class="p-4 border-b border-gray-200">
+                        <h3 class="font-semibold text-slate-800">动态Agent</h3>
+                        <p class="text-xs text-slate-500 mt-1">根据任务自动生成的临时Agent</p>
+                    </div>
+                    <div class="flex-1 overflow-y-auto p-4">
+                        <div class="space-y-3">
+                            <template x-for="agent in dynamicAgents" :key="agent.id">
+                                <div class="p-3 bg-white rounded-xl border border-gray-200 hover:border-purple-300 transition-colors">
+                                    <div class="flex items-start gap-3">
+                                        <div class="relative">
+                                            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-100 to-blue-100 flex items-center justify-center">
+                                                <i data-lucide="bot" class="w-5 h-5 text-purple-600"></i>
+                                            </div>
+                                            <div class="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white"
+                                                 :class="getAgentStatusDotColor(agent.status)"></div>
+                                        </div>
+                                        <div class="flex-1 min-w-0">
+                                            <h4 class="text-sm font-medium text-slate-800 truncate" x-text="agent.name"></h4>
+                                            <p class="text-xs text-slate-500 truncate" x-text="agent.role"></p>
+                                            <div class="flex flex-wrap gap-1 mt-1.5">
+                                                <template x-for="skill in agent.skills" :key="skill">
+                                                    <span class="px-1.5 py-0.5 text-[10px] bg-gray-100 text-slate-600 rounded" x-text="skill"></span>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="mt-2 pt-2 border-t border-gray-100">
+                                        <p class="text-xs text-slate-500" x-text="agent.currentTask"></p>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- 任务列表共享区 -->
+                    <div class="p-4 border-t border-gray-200 bg-white">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="font-medium text-slate-800 text-sm">共享任务列表</h3>
+                            <span class="text-xs text-slate-500" x-text="`${sharedTasks.filter(t => t.status === 'completed').length}/${sharedTasks.length}`"></span>
+                        </div>
+                        <div class="space-y-1.5 max-h-40 overflow-y-auto">
+                            <template x-for="task in sharedTasks" :key="task.id">
+                                <div class="flex items-center gap-2 p-2 rounded-lg text-sm"
+                                     :class="task.status === 'completed' ? 'bg-green-50' : (task.status === 'running' ? 'bg-blue-50' : 'bg-gray-50')">
+                                    <i x-show="task.status === 'completed'" data-lucide="check-circle" class="w-4 h-4 text-green-500"></i>
+                                    <i x-show="task.status === 'running'" data-lucide="loader" class="w-4 h-4 text-blue-500 animate-spin"></i>
+                                    <i x-show="task.status === 'pending'" data-lucide="circle" class="w-4 h-4 text-slate-300"></i>
+                                    <span class="flex-1 truncate" :class="task.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-700'" x-text="task.name"></span>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 中间：协作网络拓扑图 -->
+                <div class="flex-1 flex flex-col bg-white">
+                    <div class="p-4 border-b border-gray-200">
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-semibold text-slate-800">协作网络拓扑</h3>
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs text-slate-500">拓扑模式:</span>
+                                <select x-model="networkTopology" class="text-xs border border-gray-200 rounded px-2 py-1">
+                                    <option value="star">星型</option>
+                                    <option value="mesh">网状</option>
+                                    <option value="chain">链式</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 网络拓扑可视化 -->
+                    <div class="flex-1 relative bg-gradient-to-br from-slate-50 to-gray-100 overflow-hidden">
+                        <svg class="absolute inset-0 w-full h-full" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid meet">
+                            <!-- 连接线 -->
+                            <template x-for="conn in networkConnections" :key="conn.id">
+                                <line :x1="conn.x1" :y1="conn.y1" :x2="conn.x2" :y2="conn.y2"
+                                      stroke="#cbd5e1" stroke-width="2"
+                                      :class="conn.active ? 'network-line' : ''"
+                                      :stroke-opacity="conn.active ? 1 : 0.3" />
+                            </template>
+
+                            <!-- 活跃消息流 -->
+                            <template x-for="msg in activeMessages" :key="msg.id">
+                                <circle :cx="msg.x" :cy="msg.y" r="4" fill="#3b82f6" class="animate-ping" />
+                            </template>
+                        </svg>
+
+                        <!-- Agent节点 -->
+                        <template x-for="(agent, index) in dynamicAgents" :key="agent.id">
+                            <div class="absolute network-node cursor-pointer"
+                                 :style="getAgentNodePosition(index)"
+                                 @click="selectAgentForChat(agent)">
+                                <div class="flex flex-col items-center">
+                                    <div class="relative">
+                                        <div class="w-14 h-14 rounded-2xl bg-white shadow-lg border-2 flex items-center justify-center transition-all"
+                                             :class="agent.status === 'running' ? 'border-blue-500 shadow-blue-200' : 'border-gray-200'">
+                                            <i data-lucide="bot" class="w-7 h-7" :class="agent.status === 'running' ? 'text-blue-600' : 'text-slate-400'"></i>
+                                        </div>
+                                        <div class="absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white"
+                                             :class="getAgentStatusDotColor(agent.status)"></div>
+                                    </div>
+                                    <span class="mt-2 text-xs font-medium text-slate-700 bg-white px-2 py-0.5 rounded-full shadow-sm" x-text="agent.name"></span>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Agent对话流 -->
+                    <div class="h-64 border-t border-gray-200 bg-white flex flex-col">
+                        <div class="px-4 py-2 border-b border-gray-200 flex items-center justify-between">
+                            <h3 class="font-medium text-slate-800 text-sm">Agent间通信记录</h3>
+                            <div class="flex items-center gap-2">
+                                <button @click="agentChatFilter = 'all'" class="text-xs px-2 py-1 rounded" :class="agentChatFilter === 'all' ? 'bg-gray-200 text-slate-800' : 'text-slate-500 hover:bg-gray-100'">全部</button>
+                                <button @click="agentChatFilter = 'task'" class="text-xs px-2 py-1 rounded" :class="agentChatFilter === 'task' ? 'bg-gray-200 text-slate-800' : 'text-slate-500 hover:bg-gray-100'">任务</button>
+                                <button @click="agentChatFilter = 'chat'" class="text-xs px-2 py-1 rounded" :class="agentChatFilter === 'chat' ? 'bg-gray-200 text-slate-800' : 'text-slate-500 hover:bg-gray-100'">对话</button>
+                            </div>
+                        </div>
+                        <div class="flex-1 overflow-y-auto p-4 space-y-3">
+                            <template x-for="msg in filteredAgentChats" :key="msg.id">
+                                <div class="flex gap-3">
+                                    <div class="flex-shrink-0">
+                                        <div class="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center">
+                                            <i data-lucide="bot" class="w-4 h-4 text-slate-500"></i>
+                                        </div>
+                                    </div>
+                                    <div class="flex-1">
+                                        <div class="flex items-center gap-2 mb-1">
+                                            <span class="text-xs font-medium text-slate-700" x-text="msg.from"></span>
+                                            <i data-lucide="arrow-right" class="w-3 h-3 text-slate-400"></i>
+                                            <span class="text-xs font-medium text-slate-700" x-text="msg.to"></span>
+                                            <span class="text-xs text-slate-400" x-text="msg.time"></span>
+                                        </div>
+                                        <div class="p-3 bg-gray-50 rounded-lg text-sm text-slate-700" x-text="msg.content"></div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右侧：会话历史面板 -->
+                <div class="w-72 border-l border-gray-200 bg-gray-50 flex flex-col">
+                    <div class="p-4 border-b border-gray-200">
+                        <h3 class="font-semibold text-slate-800">会话历史</h3>
+                    </div>
+                    <div class="flex-1 overflow-y-auto p-4">
+                        <div class="space-y-3">
+                            <template x-for="session in collaborationHistory" :key="session.id">
+                                <div class="p-3 bg-white rounded-lg border border-gray-200 hover:border-blue-300 cursor-pointer transition-colors"
+                                     @click="loadCollaborationSession(session)">
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <i x-show="session.mode === 1" data-lucide="users" class="w-4 h-4 text-blue-600"></i>
+                                        <i x-show="session.mode === 2" data-lucide="sparkles" class="w-4 h-4 text-purple-600"></i>
+                                        <span class="text-sm font-medium text-slate-800 truncate" x-text="session.title"></span>
+                                    </div>
+                                    <div class="flex items-center gap-2 text-xs text-slate-500">
+                                        <span x-text="session.date"></span>
+                                        <span>•</span>
+                                        <span x-text="`${session.agentCount}个Agent`"></span>
+                                    </div>
+                                    <div class="flex items-center gap-1 mt-2">
+                                        <span class="px-1.5 py-0.5 text-[10px] rounded-full"
+                                              :class="session.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'"
+                                              x-text="session.status === 'completed' ? '已完成' : '进行中'"></span>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== Agent选择面板弹窗（模式1） ========== -->
+        <div x-show="showAgentSelectPanel" x-cloak class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" @click.self="showAgentSelectPanel = false">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl mx-4 overflow-hidden max-h-[80vh] flex flex-col" @click.stop>
+                <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                    <h2 class="text-xl font-semibold text-slate-800">选择Agent</h2>
+                    <button @click="showAgentSelectPanel = false" class="p-2 text-slate-400 hover:text-slate-600 rounded-lg">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+                <div class="p-4 border-b border-gray-200">
+                    <div class="flex gap-2">
+                        <input type="text" x-model="agentSearchQuery" placeholder="搜索Agent..." class="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm">
+                        <button class="px-3 py-2 text-sm text-slate-600 hover:bg-gray-100 rounded-lg flex items-center gap-1">
+                            <i data-lucide="filter" class="w-4 h-4"></i>
+                            筛选
+                        </button>
+                        <button @click="recommendAgents()" class="px-3 py-2 text-sm bg-blue-100 text-blue-700 rounded-lg flex items-center gap-1">
+                            <i data-lucide="sparkles" class="w-4 h-4"></i>
+                            智能推荐
+                        </button>
+                    </div>
+                </div>
+                <div class="flex-1 overflow-y-auto p-4">
+                    <div class="grid grid-cols-2 gap-3">
+                        <template x-for="agent in availableAgents" :key="agent.id">
+                            <div class="p-4 border border-gray-200 rounded-xl hover:border-blue-300 cursor-pointer transition-colors"
+                                 :class="isAgentSelected(agent.id) ? 'bg-blue-50 border-blue-300' : ''"
+                                 @click="toggleAgentSelection(agent)">
+                                <div class="flex items-start gap-3">
+                                    <div class="w-10 h-10 rounded-xl flex items-center justify-center" :class="agent.iconBg">
+                                        <i data-lucide="bot" class="w-5 h-5" :class="agent.iconColor"></i>
+                                    </div>
+                                    <div class="flex-1">
+                                        <div class="flex items-center justify-between">
+                                            <h4 class="font-medium text-slate-800" x-text="agent.name"></h4>
+                                            <i x-show="isAgentSelected(agent.id)" data-lucide="check-circle" class="w-5 h-5 text-blue-600"></i>
+                                        </div>
+                                        <p class="text-xs text-slate-500 mt-0.5" x-text="agent.description"></p>
+                                        <div class="flex flex-wrap gap-1 mt-2">
+                                            <template x-for="tag in agent.tags" :key="tag">
+                                                <span class="px-1.5 py-0.5 text-[10px] bg-gray-100 text-slate-600 rounded" x-text="tag"></span>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+                <div class="p-4 border-t border-gray-200 flex items-center justify-between">
+                    <span class="text-sm text-slate-600">已选择 <span x-text="selectedAgents.length" class="font-medium"></span> 个Agent</span>
+                    <div class="flex gap-2">
+                        <button @click="showAgentSelectPanel = false" class="px-4 py-2 text-slate-600 hover:bg-gray-100 rounded-lg">取消</button>
+                        <button @click="confirmAgentSelection()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">确认选择</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== 通用组件：Agent状态标签示例 ========== -->
+        <div x-show="false" class="hidden">
+            <!-- Agent状态标签规范 -->
+            <span class="px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-700">等待中</span>
+            <span class="px-2 py-0.5 text-xs rounded-full bg-blue-100 text-blue-700">运行中</span>
+            <span class="px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-700">已完成</span>
+            <span class="px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-700">错误</span>
+            <span class="px-2 py-0.5 text-xs rounded-full bg-purple-100 text-purple-700">思考中</span>
+            <span class="px-2 py-0.5 text-xs rounded-full bg-cyan-100 text-cyan-700">通信中</span>
+        </div>
+
+    </main>
+
+    <script>
+        // ========== Agent团队协作模式 - Alpine.js 数据与逻辑 ==========
+        function agentTeamApp() {
+            return {
+                // ===== 基础状态 =====
+                currentTab: 'chat',
+                sidebarOpen: true,
+                showHistoryPopover: false,
+                historySearch: '',
+                selectedHistoryId: null,
+                hasMessages: false,
+                chatInput: '',
+                messages: [],
+
+                // ===== 协作模式相关 =====
+                showTeamModeSelector: false,
+                showCollabSuggestion: false,
+                activeTeamCollab: false,
+                showQuickCommands: false,
+                showMentionPanel: false,
+                selectedMentions: [],
+
+                // ===== 模式1：预创建Agent协同 =====
+                showAgentSelectPanel: false,
+                agentSearchQuery: '',
+                selectedAgents: [],
+                mode1Tasks: [],
+                mode1Progress: 65,
+                mode1RemainingTime: '3分钟',
+                mode1Summary: {
+                    completeTime: '2026-03-12 10:45:32',
+                    totalTime: '15分32秒',
+                    agentCount: 4,
+                    taskCount: 6
+                },
+                mode1Results: [],
+                mode1FinalReport: {
+                    summary: '综合各Agent分析结果，Q1季度销售数据整体呈现增长趋势...'
+                },
+
+                // ===== 模式2：动态Agent协作 =====
+                showDynamicAgentConfig: false,
+                dynamicAgents: [],
+                sharedTasks: [],
+                networkTopology: 'star',
+                networkConnections: [],
+                activeMessages: [],
+                agentChatFilter: 'all',
+                agentChats: [],
+
+                // ===== 会话历史 =====
+                collaborationHistory: [],
+
+                // ===== 可用Agent列表 =====
+                availableAgents: [],
+
+                // ===== 历史会话列表 =====
+                historyList: [
+                    { id: 0, title: '项目推进会纪要整理', pinned: true },
+                    { id: 1, title: '本周招投标信息采集', pinned: false },
+                    { id: 2, title: '公积金政策查询', pinned: false },
+                    { id: 3, title: 'Q1销售数据分析协作', pinned: false, isCollab: true, mode: 1 },
+                    { id: 4, title: '电商系统开发规划', pinned: false, isCollab: true, mode: 2 }
+                ],
+
+                // ===== 计算属性 =====
+                get filteredHistoryList() {
+                    return this.historyList.filter(h =>
+                        !this.historySearch || h.title.toLowerCase().includes(this.historySearch.toLowerCase())
+                    );
+                },
+
+                get filteredAgentChats() {
+                    if (this.agentChatFilter === 'all') return this.agentChats;
+                    return this.agentChats.filter(c => c.type === this.agentChatFilter);
+                },
+
+                // ===== 初始化 =====
+                init() {
+                    this.initMockData();
+                    this.$nextTick(() => {
+                        if (typeof lucide !== 'undefined' && lucide.createIcons) {
+                            lucide.createIcons();
+                        }
+                    });
+                },
+
+                // ===== 初始化Mock数据 =====
+                initMockData() {
+                    // 可用Agent
+                    this.availableAgents = [
+                        { id: 'agent-1', name: '数据分析员', description: '擅长数据处理和趋势分析', iconBg: 'bg-blue-100', iconColor: 'text-blue-600', tags: ['数据分析', '报表'], status: 'running', role: '数据专家', currentTask: '正在生成趋势图表...', timeInfo: '已运行 5分钟' },
+                        { id: 'agent-2', name: '文案专员', description: '专业文档撰写和内容创作', iconBg: 'bg-green-100', iconColor: 'text-green-600', tags: ['写作', '文档'], status: 'completed', role: '内容专家', currentTask: '已完成报告撰写', timeInfo: '耗时 3分钟' },
+                        { id: 'agent-3', name: '研究员', description: '深度研究和信息收集', iconBg: 'bg-amber-100', iconColor: 'text-amber-600', tags: ['研究', '调研'], status: 'waiting', role: '研究专家', currentTask: '等待数据分析结果...', timeInfo: '等待中' },
+                        { id: 'agent-4', name: '设计师', description: 'UI设计和可视化制作', iconBg: 'bg-purple-100', iconColor: 'text-purple-600', tags: ['设计', '可视化'], status: 'waiting', role: '设计专家', currentTask: '等待数据准备...', timeInfo: '等待中' },
+                        { id: 'agent-5', name: '合规审查员', description: '文档合规性检查', iconBg: 'bg-orange-100', iconColor: 'text-orange-600', tags: ['合规', '审查'], status: 'idle', role: '合规专家', currentTask: '待命', timeInfo: '' },
+                        { id: 'agent-6', name: '测试工程师', description: '代码测试和质量保证', iconBg: 'bg-cyan-100', iconColor: 'text-cyan-600', tags: ['测试', 'QA'], status: 'idle', role: '测试专家', currentTask: '待命', timeInfo: '' }
+                    ];
+
+                    // 默认选中的Agent
+                    this.selectedAgents = [this.availableAgents[0], this.availableAgents[1], this.availableAgents[2]];
+
+                    // 模式1任务
+                    this.mode1Tasks = [
+                        { name: '数据清洗', description: '清洗原始销售数据', assignedAgent: 'agent-1' },
+                        { name: '趋势分析', description: '分析销售趋势和异常点', assignedAgent: 'agent-1' },
+                        { name: '报告撰写', description: '撰写分析执行摘要', assignedAgent: 'agent-2' },
+                        { name: '资料收集', description: '收集行业对比数据', assignedAgent: 'agent-3' },
+                        { name: '图表设计', description: '制作可视化图表', assignedAgent: '' },
+                        { name: '合规审查', description: '审查报告合规性', assignedAgent: '' }
+                    ];
+
+                    // 模式1结果
+                    this.mode1Results = [
+                        { agentId: 'agent-1', agentName: '数据分析员', iconBg: 'bg-blue-100', iconColor: 'text-blue-600', summary: '完成Q1销售数据的清洗和分析，发现3个异常增长点...' },
+                        { agentId: 'agent-2', agentName: '文案专员', iconBg: 'bg-green-100', iconColor: 'text-green-600', summary: '撰写完成执行摘要，包含核心发现和建议措施...' }
+                    ];
+
+                    // 动态Agent
+                    this.dynamicAgents = [
+                        { id: 'dyn-1', name: '后端开发Agent', role: '后端架构师', status: 'running', skills: ['API设计', '数据库'], currentTask: '设计用户管理API接口' },
+                        { id: 'dyn-2', name: '前端开发Agent', role: '前端工程师', status: 'running', skills: ['React', 'UI设计'], currentTask: '开发用户列表页面' },
+                        { id: 'dyn-3', name: '数据库Agent', role: 'DBA', status: 'completed', skills: ['Schema设计', '优化'], currentTask: '已完成用户表设计' },
+                        { id: 'dyn-4', name: '测试Agent', role: 'QA工程师', status: 'waiting', skills: ['测试用例', '自动化'], currentTask: '等待开发完成' }
+                    ];
+
+                    // 共享任务
+                    this.sharedTasks = [
+                        { id: 1, name: '数据库Schema设计', status: 'completed' },
+                        { id: 2, name: '后端API开发', status: 'running' },
+                        { id: 3, name: '前端页面开发', status: 'running' },
+                        { id: 4, name: '接口联调', status: 'pending' },
+                        { id: 5, name: '测试用例编写', status: 'pending' }
+                    ];
+
+                    // 网络连接
+                    this.networkConnections = [
+                        { id: 1, x1: 400, y1: 100, x2: 200, y2: 250, active: true },
+                        { id: 2, x1: 400, y1: 100, x2: 400, y2: 250, active: true },
+                        { id: 3, x1: 400, y1: 100, x2: 600, y2: 250, active: false },
+                        { id: 4, x1: 200, y1: 250, x2: 400, y2: 400, active: false },
+                        { id: 5, x1: 400, y1: 250, x2: 400, y2: 400, active: false }
+                    ];
+
+                    // Agent对话
+                    this.agentChats = [
+                        { id: 1, from: '后端开发Agent', to: '数据库Agent', content: '请提供用户表的字段定义', time: '10:42:15', type: 'task' },
+                        { id: 2, from: '数据库Agent', to: '后端开发Agent', content: '用户表已设计完成，包含id, username, email等字段', time: '10:42:18', type: 'task' },
+                        { id: 3, from: '前端开发Agent', to: '后端开发Agent', content: 'API接口设计进展如何？', time: '10:43:20', type: 'chat' },
+                        { id: 4, from: '后端开发Agent', to: '前端开发Agent', content: '已完成80%，预计5分钟后提供接口文档', time: '10:43:25', type: 'chat' }
+                    ];
+
+                    // 协作历史
+                    this.collaborationHistory = [
+                        { id: 1, title: 'Q1销售数据分析协作', date: '今天', mode: 1, agentCount: 4, status: 'completed' },
+                        { id: 2, title: '电商系统开发规划', date: '今天', mode: 2, agentCount: 4, status: 'running' },
+                        { id: 3, title: '产品需求文档编写', date: '昨天', mode: 1, agentCount: 3, status: 'completed' },
+                        { id: 4, title: '技术架构评审', date: '昨天', mode: 2, agentCount: 5, status: 'completed' }
+                    ];
+                },
+
+                // ===== 方法 =====
+                resetChat() {
+                    this.chatInput = '';
+                    this.selectedMentions = [];
+                    this.hasMessages = false;
+                    this.messages = [];
+                },
+
+                loadHistory(item) {
+                    this.currentTab = 'chat';
+                    this.selectedHistoryId = item.id;
+                    this.hasMessages = item.isCollab || item.id === 0;
+                    if (item.isCollab) {
+                        this.currentTab = item.mode === 1 ? 'team-mode1' : 'team-mode2';
+                    }
+                },
+
+                handleChatKeydown(event) {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault();
+                        this.sendMessage();
+                    }
+                    if (event.key === '@') {
+                        this.showMentionPanel = true;
+                    }
+                },
+
+                sendMessage() {
+                    if (!this.chatInput.trim()) return;
+
+                    // 检测快捷指令
+                    if (this.chatInput.startsWith('/team')) {
+                        this.openTeamModeSelector();
+                        this.chatInput = '';
+                        return;
+                    }
+
+                    // 检测协作模式触发
+                    if (this.chatInput.includes('团队') || this.chatInput.includes('协作') || this.chatInput.includes('一起')) {
+                        this.showCollabSuggestion = true;
+                    }
+
+                    this.messages.push({
+                        role: 'user',
+                        content: this.chatInput,
+                        time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+                    });
+
+                    this.hasMessages = true;
+                    this.chatInput = '';
+
+                    // 模拟回复
+                    setTimeout(() => {
+                        this.messages.push({
+                            role: 'assistant',
+                            content: '我已收到您的请求。这是一个复杂任务，建议启动Agent团队协作模式来完成。',
+                            time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+                        });
+                        this.showCollabSuggestion = true;
+                    }, 1000);
+                },
+
+                openTeamModeSelector() {
+                    this.showTeamModeSelector = true;
+                    this.showQuickCommands = false;
+                },
+
+                selectTeamMode(mode) {
+                    this.showTeamModeSelector = false;
+                    this.activeTeamCollab = true;
+                    this.currentTab = mode === 1 ? 'team-mode1' : 'team-mode2';
+                },
+
+                selectQuickCommand(cmd) {
+                    this.chatInput = cmd;
+                    this.showQuickCommands = false;
+                    if (cmd.includes('/team') || cmd.includes('/dynamic')) {
+                        this.openTeamModeSelector();
+                    }
+                },
+
+                removeMention(id) {
+                    this.selectedMentions = this.selectedMentions.filter(m => m.id !== id);
+                },
+
+                // ===== 模式1方法 =====
+                isAgentSelected(agentId) {
+                    return this.selectedAgents.some(a => a.id === agentId);
+                },
+
+                toggleAgentSelection(agent) {
+                    const index = this.selectedAgents.findIndex(a => a.id === agent.id);
+                    if (index > -1) {
+                        this.selectedAgents.splice(index, 1);
+                    } else {
+                        this.selectedAgents.push(agent);
+                    }
+                },
+
+                confirmAgentSelection() {
+                    this.showAgentSelectPanel = false;
+                },
+
+                recommendAgents() {
+                    // 智能推荐逻辑
+                    this.selectedAgents = [this.availableAgents[0], this.availableAgents[1], this.availableAgents[2]];
+                },
+
+                autoAssignTasks() {
+                    // 自动分配任务逻辑
+                    this.mode1Tasks.forEach((task, index) => {
+                        if (this.selectedAgents[index % this.selectedAgents.length]) {
+                            task.assignedAgent = this.selectedAgents[index % this.selectedAgents.length].id;
+                        }
+                    });
+                },
+
+                pauseCollaboration() {
+                    // 暂停协作逻辑
+                    alert('协作已暂停');
+                },
+
+                // ===== 状态样式方法 =====
+                getAgentStatusClass(status) {
+                    const map = {
+                        'waiting': 'bg-amber-100 text-amber-700',
+                        'running': 'bg-blue-100 text-blue-700',
+                        'completed': 'bg-green-100 text-green-700',
+                        'error': 'bg-red-100 text-red-700',
+                        'thinking': 'bg-purple-100 text-purple-700',
+                        'idle': 'bg-gray-100 text-gray-600'
+                    };
+                    return map[status] || map['idle'];
+                },
+
+                getAgentStatusText(status) {
+                    const map = {
+                        'waiting': '等待中',
+                        'running': '运行中',
+                        'completed': '已完成',
+                        'error': '错误',
+                        'thinking': '思考中',
+                        'idle': '空闲'
+                    };
+                    return map[status] || '空闲';
+                },
+
+                getAgentStatusDotColor(status) {
+                    const map = {
+                        'waiting': 'bg-amber-500',
+                        'running': 'bg-blue-500',
+                        'completed': 'bg-green-500',
+                        'error': 'bg-red-500',
+                        'thinking': 'bg-purple-500',
+                        'idle': 'bg-gray-400'
+                    };
+                    return map[status] || map['idle'];
+                },
+
+                getAgentTimelineColor(status) {
+                    const map = {
+                        'waiting': 'bg-amber-400',
+                        'running': 'bg-blue-500',
+                        'completed': 'bg-green-500',
+                        'error': 'bg-red-500'
+                    };
+                    return map[status] || 'bg-gray-300';
+                },
+
+                getAgentTimelineStyle(agent) {
+                    // 模拟时间轴样式
+                    const widths = { 'completed': '100%', 'running': '60%', 'waiting': '0%' };
+                    return `width: ${widths[agent.status] || '0%'}`;
+                },
+
+                // ===== 模式2方法 =====
+                getAgentNodePosition(index) {
+                    const positions = [
+                        { left: '50%', top: '15%', transform: 'translate(-50%, 0)' },
+                        { left: '20%', top: '45%', transform: 'translate(-50%, 0)' },
+                        { left: '50%', top: '45%', transform: 'translate(-50%, 0)' },
+                        { left: '80%', top: '45%', transform: 'translate(-50%, 0)' }
+                    ];
+                    return positions[index] || positions[0];
+                },
+
+                selectAgentForChat(agent) {
+                    // 选中Agent进行对话
+                    console.log('Selected agent:', agent.name);
+                },
+
+                loadCollaborationSession(session) {
+                    this.currentTab = session.mode === 1 ? 'team-mode1' : 'team-mode2';
+                }
+            };
+        }
+    </script>
+</body>
+</html>

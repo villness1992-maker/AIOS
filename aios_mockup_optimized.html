@@ -1,0 +1,2228 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IFLY AIOS - 原型演示</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Alpine.js for interactivity -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* ========== UI 设计规范（统一间距、字体、圆角） ==========
+         * 间距：页面 px-6 py-6；区块间距 gap-5 / space-y-5；列表项 py-2.5 px-4；卡片 p-4
+         * 字体：页面标题 text-xl font-semibold；区块标题 text-base font-semibold；卡片/列表标题 text-sm font-medium；正文 text-sm；辅助 text-xs
+         * 颜色：主文案 slate-800，次要 slate-600，辅助 slate-500；主按钮 blue-600；边框 gray-200
+         * 圆角：按钮/输入 rounded-lg；卡片/面板 rounded-xl；标签 rounded-full
+         */
+        /* 自定义滚动条 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        .typing-cursor::after {
+            content: '|';
+            animation: blink 1s step-start infinite;
+        }
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .typing-cursor::after { animation: none; opacity: 1; }
+            .animate-spin { animation: none; }
+            .animate-ping { animation: none; }
+        }
+        /* Focus visible: never outline-none without replacement */
+        .focus-ring:focus-visible {
+            outline: 2px solid #2563eb;
+            outline-offset: 2px;
+        }
+        button:focus-visible, [role="button"]:focus-visible, a:focus-visible {
+            outline: 2px solid #2563eb;
+            outline-offset: 2px;
+        }
+        /* Touch: prevent double-tap zoom delay */
+        button, [role="button"], a { touch-action: manipulation; }
+        .overscroll-contain { overscroll-behavior: contain; }
+        .tabular-nums { font-variant-numeric: tabular-nums; }
+        .skip-link {
+            position: absolute;
+            left: -9999px;
+            z-index: 100;
+        }
+        .skip-link:focus {
+            left: 1rem;
+            top: 1rem;
+            padding: 0.5rem 1rem;
+            background: #2563eb;
+            color: white;
+            border-radius: 0.5rem;
+            outline: 2px solid #2563eb;
+            outline-offset: 2px;
+        }
+        [x-cloak] { display: none !important; }
+    </style>
+</head>
+<body class="bg-gray-50 text-slate-800 font-sans antialiased h-screen flex overflow-hidden" x-data="{ 
+    currentTab: 'chat',
+    sidebarOpen: true,
+    showToolDetails: false,
+    confirmAction: false,
+    chatInput: '',
+    previewOpen: false,
+    previewTitle: '',
+    stepDetailType: 'code',
+    taskSubTab: 'timed',
+    taskScheduleType: 'weekly',
+    taskScheduleDay: 'FRI',
+    taskScheduleTime: '22:00',
+    taskSessionId: '',
+    showAddSkillModal: false,
+    showCreateTaskModal: false,
+    showCreatePlanModal: false,
+    showSkillDropdown: false,
+    showHomeSkillPanel: false,
+    homeSkillSearch: '',
+    showMoreDropdown: false,
+    showHistoryPopover: false,
+    uploadedFile: null,
+    selectedHomeSkill: null,
+    selectedHomeAgent: null,
+    showMentionPanel: false,
+    mentionAgents: [{ id: 'agent-1', name: '政务办公助手' }, { id: 'agent-2', name: '合规审查专员' }],
+    mentionSkills: [{ id: 's1', name: '文档生成专家' }, { id: 's2', name: '联网深度搜索' }, { id: 's3', name: 'Excel 生成器' }],
+    hasMessages: true,
+    selectedHistoryId: null,
+    selectedAgentId: null,
+    selectedAgentName: '',
+    selectedAgentSubtitle: '',
+    selectedAgentType: 'main',
+    agentList: [
+        { id: 'agent-1', name: '政务办公助手', subtitle: 'Main Agent，负责处理日常办公请求，分发任务给子智能体', type: 'main', status: '运行中', callCount: '1.2k', icon: 'briefcase', iconBg: 'bg-indigo-100', iconColor: 'text-indigo-600' },
+        { id: 'agent-2', name: '合规审查专员', subtitle: 'Sub-Agent，专门负责招投标文件、合同的合规性审查', type: 'builtin', status: '运行中', callCount: '340', icon: 'shield-check', iconBg: 'bg-orange-100', iconColor: 'text-orange-600' },
+        { id: 'agent-3', name: '会议纪要助手', subtitle: '自动整理会议记录并生成待办', type: 'custom', status: '运行中', callCount: '89', icon: 'file-text', iconBg: 'bg-emerald-100', iconColor: 'text-emerald-600' }
+    ],
+    agentConfigTab: 'files',
+    selectedAgentFile: null,
+    historySearch: '',
+    workspacePath: 'C:\\Program Files\\讯飞AIOS\\workspace',
+    showRenameModal: false,
+    showDeleteModal: false,
+    renameTitle: '',
+    conversationToDelete: null,
+    conversationToRename: null,
+    historyList: [
+        { id: 0, title: '项目推进会纪要整理', pinned: true },
+        { id: 1, title: '本周招投标信息采集', pinned: false },
+        { id: 2, title: '公积金政策查询', pinned: false }
+    ],
+    builtinToolsList: [
+        { id: 't1', name: 'docx_writer', desc: '生成 Word 文档', linked: '文档生成专家 · 政务助手', enabled: true },
+        { id: 't2', name: 'web_search', desc: '联网检索', linked: '联网深度搜索 · 政务助手', enabled: true }
+    ],
+    integrationConfigModal: null,
+    integrationStatus: { feishu: false, dingtalk: false, wecom: false },
+    skillList: [
+        { id: 's1', name: '文档生成专家', desc: '生成标准公文格式文档', type: '生成类', tools: 'docx_writer', agents: '政务助手、会议纪要助手', source: '内置', enabled: true },
+        { id: 's2', name: '联网深度搜索', desc: '多源信息检索与聚合', type: '检索类', tools: 'google_search, browser', agents: '政务助手、政策查询助手', source: '个人', enabled: true }
+    ],
+    skillDetailIsBuiltin: false,
+    skillSourceFilter: 'all',
+    skillView: 'list',
+    skillDetailName: '公文润色',
+    skillActiveFile: 'SKILL.md',
+    skillTreeOpen: { root: true, references: true },
+    showAgentCreateModal: false,
+    agentCreateStep: 'input',
+    agentCreateInput: '',
+    agentCreateLoading: false,
+    agentCreateProgress: '正在分析需求…',
+    agentCreateTasks: [
+        { name: '生成角色定义', done: false, active: false },
+        { name: '挂载 Skill/Tools', done: false, active: false },
+        { name: '写入配置文件', done: false, active: false }
+    ],
+    agentModel: 'spark-4',
+    agentEditorTab: 'agent.md',
+    mountableSkills: [{ name: '文档生成专家', type: 'Skill', mounted: true }, { name: '联网深度搜索', type: 'Skill', mounted: true }],
+    mountableTools: [{ name: 'docx_writer', type: 'Tool', mounted: true }, { name: 'web_search', type: 'Tool', mounted: true }],
+    showMcpModal: false,
+    mcpForm: { name: '', protocol: 'mcp', host: '', needAuth: false, authType: 'apiKey', authToken: '', oauthClientId: '', oauthClientSecret: '', mtlsCert: '', desc: '' },
+    mcpTestStatus: 'idle',
+    mcpTestError: '',
+    mcpToolsPreview: [],
+    testMcpConnection() {
+        if (!this.mcpForm.name || !this.mcpForm.host) return;
+        this.mcpTestStatus = 'testing';
+        this.mcpTestError = '';
+        const self = this;
+        setTimeout(() => {
+            if (self.mcpForm.host.includes(':') || self.mcpForm.host.includes('.')) {
+                self.mcpTestStatus = 'success';
+                self.mcpToolsPreview = ['file_read', 'file_write', 'db_query', 'data_export', 'text_analyze'];
+            } else {
+                self.mcpTestStatus = 'error';
+                self.mcpTestError = '无法连接到 MCP Server，请检查地址和端口是否正确';
+            }
+            if (typeof lucide !== 'undefined' && lucide.createIcons) lucide.createIcons();
+        }, 1500);
+    },
+    registerMcp() {
+        this.showMcpModal = false;
+        this.mcpTestStatus = 'idle';
+        this.mcpToolsPreview = [];
+        this.mcpForm = { name: '', protocol: 'mcp', host: '', needAuth: false, authType: 'apiKey', authToken: '', oauthClientId: '', oauthClientSecret: '', mtlsCert: '', desc: '' };
+        alert('MCP Server 注册成功！');
+    },
+    showTaskExecLogModal: false,
+    selectedTaskExecLogName: '',
+    taskExecLogs: [
+        { time: '2026-03-06 17:00', status: '成功', summary: '已汇总 5 条事项并发送邮件' },
+        { time: '2026-03-05 17:00', status: '成功', summary: '已汇总 3 条事项并发送邮件' },
+        { time: '2026-03-04 17:00', status: '失败', summary: '邮件服务超时' }
+    ],
+    timedTasks: [
+        { name: '每周工作周报汇总', enabled: true, desc: '汇总本周已完成事项并发送邮件', schedule: '每周五 17:00', session: '项目推进会纪要', status: '成功' },
+        { name: '每日舆情监测', enabled: false, desc: '搜索关键词并生成简报', schedule: '每天 09:00', session: '', status: '失败' }
+    ],
+    showToast: false,
+    toastMessage: '',
+    showTaskToast(taskName) {
+        this.toastMessage = '执行完成';
+        this.showToast = true;
+        const self = this;
+        setTimeout(() => { self.showToast = false; }, 2500);
+    },
+    // ========== 工具调用链路面板 ==========
+    showToolPanel: false,
+    selectedToolId: null,
+    toolFilter: 'all',
+    toolCalls: [
+        { id: 'tc_001', toolName: 'excel-generator', displayName: 'Excel生成器', type: 'code', category: '文档生成', status: 'success', startTime: '10:30:15', duration: 2340, input: { template: 'sales_analysis', data: 'Q1销售数据' }, output: { fileName: '销售业绩分析报告.xlsx', size: 24576 }, stepName: '生成销售分析报告', messageId: 'msg_001' },
+        { id: 'tc_002', toolName: 'docx_writer', displayName: '文档生成器', type: 'document', category: '文档生成', status: 'success', startTime: '10:30:18', duration: 1850, input: { title: '智慧城市二期项目推进会纪要', content: '...' }, output: { fileName: '项目推进会纪要.docx', size: 15360 }, stepName: '生成会议纪要文档', messageId: 'msg_001' },
+        { id: 'tc_003', toolName: 'web_search', displayName: '联网检索', type: 'search', category: '信息检索', status: 'success', startTime: '10:30:22', duration: 850, input: { query: '智慧城市项目推进会 政策', sources: 3 }, output: { results: 5, topResult: '智慧城市建设指南2026' }, stepName: '检索相关政策资料', messageId: 'msg_001' },
+        { id: 'tc_004', toolName: 'file_read', displayName: '文件读取', type: 'file', category: '文件操作', status: 'success', startTime: '10:30:25', duration: 320, input: { path: '会议记录.docx' }, output: { size: 10240, encoding: 'utf-8' }, stepName: '读取会议记录文件', messageId: 'msg_001' },
+        { id: 'tc_005', toolName: 'wecom_send', displayName: '企业微信发送', type: 'notification', category: '消息通知', status: 'pending', startTime: '10:30:28', duration: null, input: { recipients: ['张三', '李四'], message: '待办事项通知' }, output: null, stepName: '发送待办通知给负责人', messageId: 'msg_001' }
+    ],
+    get toolCallsByFilter() {
+        if (this.toolFilter === 'all') return this.toolCalls;
+        return this.toolCalls.filter(tc => tc.status === this.toolFilter);
+    },
+    get toolCallStats() {
+        return {
+            total: this.toolCalls.length,
+            success: this.toolCalls.filter(t => t.status === 'success').length,
+            running: this.toolCalls.filter(t => t.status === 'running').length,
+            pending: this.toolCalls.filter(t => t.status === 'pending').length,
+            error: this.toolCalls.filter(t => t.status === 'error').length
+        };
+    },
+    getToolIcon(type) {
+        const map = { code: 'terminal', document: 'file-text', search: 'search', file: 'folder-open', notification: 'bell', api: 'globe', database: 'database' };
+        return map[type] || 'wrench';
+    },
+    getToolIconColor(type) {
+        const map = { code: 'text-blue-600', document: 'text-green-600', search: 'text-purple-600', file: 'text-amber-600', notification: 'text-orange-600', api: 'text-cyan-600', database: 'text-indigo-600' };
+        return map[type] || 'text-slate-600';
+    },
+    getToolBgColor(type) {
+        const map = { code: 'bg-blue-100', document: 'bg-green-100', search: 'bg-purple-100', file: 'bg-amber-100', notification: 'bg-orange-100', api: 'bg-cyan-100', database: 'bg-indigo-100' };
+        return map[type] || 'bg-slate-100';
+    },
+    openToolPanel(toolId) {
+        this.selectedToolId = toolId;
+        this.showToolPanel = true;
+        this.previewOpen = false;
+    },
+    closeToolPanel() {
+        this.showToolPanel = false;
+        this.selectedToolId = null;
+    },
+    formatDuration(ms) {
+        if (!ms) return '-';
+        if (ms < 1000) return ms + 'ms';
+        return (ms / 1000).toFixed(1) + 's';
+    },
+    formatBytes(bytes) {
+        if (!bytes) return '-';
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+}">
+    <a href="#main-content" class="skip-link">跳至主内容</a>
+
+    <!-- Sidebar（参考 Manus；收起时历史列表弹出层需浮于主内容之上，故弹出时提升 z-index） -->
+    <aside class="bg-gray-50 border-r border-gray-200 flex flex-col transition-[width] duration-300 h-full relative" 
+           :class="[sidebarOpen ? 'w-64' : 'w-16', showHistoryPopover ? 'z-50' : 'z-auto']">
+        
+        <!-- 1. 品牌区：展开时 Logo+名称+展开收起；收起时不展示 AI icon，仅展示展开收起 -->
+        <div class="h-14 flex-shrink-0 flex items-center px-3 gap-2"
+             :class="sidebarOpen ? 'justify-between' : 'flex-col justify-center gap-1'">
+            <div class="flex items-center min-w-0 gap-2" x-show="sidebarOpen">
+                <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold flex-shrink-0 shadow-sm">
+                    AI
+                </div>
+                <span class="ml-2 font-semibold text-lg text-slate-800 tracking-tight truncate">IFLY AIOS</span>
+            </div>
+            <button type="button" @click="sidebarOpen = !sidebarOpen" aria-label="展开或收起侧边栏" aria-expanded="sidebarOpen"
+                    class="flex-shrink-0 p-1.5 text-slate-500 hover:text-slate-700 hover:bg-gray-200 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                <i data-lucide="panel-left" class="w-5 h-5" aria-hidden="true"></i>
+            </button>
+        </div>
+
+        <!-- 2. 主操作：新建任务（收起时仅显示图标，参考图1） -->
+        <div class="px-3 mt-3 mb-3" :class="sidebarOpen ? '' : 'flex justify-center'">
+            <button type="button" @click="currentTab = 'chat'; chatInput = ''; selectedHistoryId = null; hasMessages = false;"
+                    aria-label="新建任务"
+                    class="w-full flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl shadow-sm transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                    :class="sidebarOpen ? 'py-2.5 px-4' : 'w-10 h-10 p-0'">
+                <i data-lucide="pen-square" class="flex-shrink-0" :class="sidebarOpen ? 'w-4 h-4 mr-2' : 'w-5 h-5'" aria-hidden="true"></i>
+                <span x-show="sidebarOpen">新建任务</span>
+            </button>
+        </div>
+
+        <!-- 3. 一级导航（扁平，无分组标题） -->
+        <nav class="px-3 space-y-0.5 flex-shrink-0">
+            <button type="button" @click="currentTab = 'agents'" aria-label="智能体"
+                    class="w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                    :class="currentTab === 'agents' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:bg-gray-100'">
+                <i data-lucide="bot" class="w-4 h-4 flex-shrink-0" aria-hidden="true"></i>
+                <span class="ml-3 truncate min-w-0" x-show="sidebarOpen">智能体</span>
+            </button>
+            <button type="button" @click="currentTab = 'skills'" aria-label="技能"
+                    class="w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                    :class="currentTab === 'skills' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:bg-gray-100'">
+                <i data-lucide="library" class="w-4 h-4 flex-shrink-0" aria-hidden="true"></i>
+                <span class="ml-3 truncate min-w-0" x-show="sidebarOpen">技能</span>
+            </button>
+            <button type="button" @click="currentTab = 'tools'" aria-label="工具"
+                    class="w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                    :class="currentTab === 'tools' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:bg-gray-100'">
+                <i data-lucide="wrench" class="w-4 h-4 flex-shrink-0" aria-hidden="true"></i>
+                <span class="ml-3 truncate min-w-0" x-show="sidebarOpen">工具</span>
+            </button>
+            <button type="button" @click="currentTab = 'tasks'; taskSubTab = 'timed';" aria-label="定时任务"
+                    class="w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                    :class="currentTab === 'tasks' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:bg-gray-100'">
+                <i data-lucide="clock" class="w-4 h-4 flex-shrink-0" aria-hidden="true"></i>
+                <span class="ml-3 truncate min-w-0" x-show="sidebarOpen">定时任务</span>
+            </button>
+            <button type="button" @click="currentTab = 'integrations'" aria-label="远程调度"
+                    class="w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                    :class="currentTab === 'integrations' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:bg-gray-100'">
+                <i data-lucide="plug" class="w-4 h-4 flex-shrink-0" aria-hidden="true"></i>
+                <span class="ml-3 truncate min-w-0" x-show="sidebarOpen">远程调度</span>
+            </button>
+            <button type="button" @click="currentTab = 'settings'" aria-label="个人设置"
+                    class="w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                    :class="currentTab === 'settings' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:bg-gray-100'">
+                <i data-lucide="settings" class="w-4 h-4 flex-shrink-0" aria-hidden="true"></i>
+                <span class="ml-3 truncate min-w-0" x-show="sidebarOpen">个人设置</span>
+            </button>
+        </nav>
+
+        <!-- 4. 历史会话：展开时搜索 + 列表；收起时单图标 + hover 弹出历史列表（与能力说明 UC-CHAT-02 一致） -->
+        <div class="flex-1 flex flex-col min-h-0 mt-3 relative"
+             :class="sidebarOpen ? 'overflow-hidden' : 'overflow-visible'">
+            <!-- 展开时：区块标题 + 搜索 + 列表 -->
+            <template x-if="sidebarOpen">
+                <div class="flex flex-col h-full min-h-0">
+                    <div class="px-3 flex items-center justify-between flex-shrink-0">
+                        <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">历史会话</span>
+                    </div>
+                    <div class="px-3 mt-1.5 flex-shrink-0">
+                        <label for="history-search" class="sr-only">搜索对话</label>
+                        <input id="history-search" type="search" x-model="historySearch" placeholder="搜索对话…" aria-label="搜索对话"
+                               class="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    </div>
+                    <div class="flex-1 overflow-y-auto min-h-0 mt-1 px-1 space-y-0.5">
+                        <template x-if="historyList.filter(h => !historySearch || h.title.toLowerCase().includes(historySearch.toLowerCase())).length === 0">
+                            <div class="px-3 py-6 text-center text-sm text-slate-500" x-show="true">暂无历史对话</div>
+                        </template>
+                        <template x-for="item in historyList.filter(h => !historySearch || h.title.toLowerCase().includes(historySearch.toLowerCase()))" :key="item.id">
+                            <div class="group flex items-center rounded-lg transition-colors"
+                                 :class="currentTab === 'chat' && selectedHistoryId === item.id ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:bg-gray-100'">
+                                <button type="button" @click="currentTab = 'chat'; selectedHistoryId = item.id; hasMessages = (item.id === 0);" class="flex-1 min-w-0 flex items-center px-3 py-2 text-sm text-left">
+                                    <i data-lucide="message-square" class="w-4 h-4 flex-shrink-0 mr-2 text-slate-400" aria-hidden="true"></i>
+                                    <span x-show="item.pinned" class="flex-shrink-0 mr-1 text-amber-500" aria-label="已置顶"><i data-lucide="pin" class="w-3.5 h-3.5" aria-hidden="true"></i></span>
+                                    <span class="truncate" x-text="item.title"></span>
+                                </button>
+                                <div class="flex items-center flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button type="button" @click="item.pinned = !item.pinned" :aria-label="item.pinned ? '取消置顶' : '置顶'" class="p-1.5 text-slate-400 hover:text-slate-600 rounded"><i data-lucide="pin" class="w-4 h-4" aria-hidden="true"></i></button>
+                                    <button type="button" @click="conversationToRename = item; renameTitle = item.title; showRenameModal = true" aria-label="重命名" class="p-1.5 text-slate-400 hover:text-slate-600 rounded"><i data-lucide="pencil" class="w-4 h-4" aria-hidden="true"></i></button>
+                                    <button type="button" @click="conversationToDelete = item; showDeleteModal = true" aria-label="删除" class="p-1.5 text-slate-400 hover:text-red-500 rounded"><i data-lucide="trash-2" class="w-4 h-4" aria-hidden="true"></i></button>
+                                </div>
+                            </div>
+                        </template>
+                        <button type="button" class="w-full text-center px-3 py-2 text-sm text-blue-600 hover:bg-gray-100 rounded-lg">查看更多</button>
+                    </div>
+                </div>
+            </template>
+            <!-- 收起时：单图标，hover 显示历史列表 -->
+            <div x-show="!sidebarOpen" class="flex flex-col items-center pt-1">
+                <div class="relative" @mouseenter="showHistoryPopover = true" @mouseleave="showHistoryPopover = false">
+                    <button type="button" aria-label="历史会话" aria-haspopup="true" :aria-expanded="showHistoryPopover"
+                            class="w-10 h-10 flex items-center justify-center rounded-lg text-slate-600 hover:bg-gray-100 hover:text-slate-800 transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                            :class="showHistoryPopover ? 'bg-gray-100 text-slate-800' : ''">
+                        <i data-lucide="list" class="w-5 h-5" aria-hidden="true"></i>
+                    </button>
+                    <!-- 弹出层：历史任务列表，参考图2 -->
+                    <div x-show="showHistoryPopover" x-cloak x-transition:enter="transition ease-out duration-150"
+                         x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+                         x-transition:leave="transition ease-in duration-100" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0"
+                         class="absolute left-full top-0 ml-1 z-50 w-64 py-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden"
+                         style="display: none;"
+                         @mouseenter="showHistoryPopover = true" @mouseleave="showHistoryPopover = false">
+                        <div class="px-3 py-2 border-b border-gray-100">
+                            <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">历史会话</span>
+                        </div>
+                        <div class="max-h-72 overflow-y-auto py-1">
+                            <button type="button" @click="currentTab = 'chat'; selectedHistoryId = 0; hasMessages = true; showHistoryPopover = false;" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-left rounded-lg mx-1 transition-colors"
+                                    :class="currentTab === 'chat' && selectedHistoryId === 0 ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-gray-50'">
+                                <i data-lucide="message-square" class="w-4 h-4 flex-shrink-0 text-slate-400"></i>
+                                <span class="truncate flex-1 min-w-0">项目推进会纪要整理</span>
+                            </button>
+                            <button type="button" @click="currentTab = 'chat'; selectedHistoryId = 1; hasMessages = false; showHistoryPopover = false;" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-left rounded-lg mx-1 transition-colors"
+                                    :class="currentTab === 'chat' && selectedHistoryId === 1 ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-gray-50'">
+                                <i data-lucide="file-text" class="w-4 h-4 flex-shrink-0 text-slate-400"></i>
+                                <span class="truncate flex-1 min-w-0">本周招投标信息采集</span>
+                            </button>
+                            <button type="button" @click="currentTab = 'chat'; selectedHistoryId = 2; hasMessages = false; showHistoryPopover = false;" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-left rounded-lg mx-1 transition-colors"
+                                    :class="currentTab === 'chat' && selectedHistoryId === 2 ? 'bg-blue-50 text-blue-600' : 'text-slate-700 hover:bg-gray-50'">
+                                <i data-lucide="file-search" class="w-4 h-4 flex-shrink-0 text-slate-400"></i>
+                                <span class="truncate flex-1 min-w-0">公积金政策查询</span>
+                            </button>
+                        </div>
+                        <div class="border-t border-gray-100 pt-1">
+                            <button type="button" class="w-full text-center px-3 py-2 text-sm text-blue-600 hover:bg-gray-50 rounded-lg mx-1">查看更多</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. 底部：用户 -->
+        <div class="border-t border-gray-200 flex-shrink-0 p-3">
+            <button type="button" @click="currentTab = 'settings'" aria-label="用户与设置" class="w-full flex items-center p-2 rounded-lg hover:bg-gray-100 transition-colors text-left focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                <img class="h-8 w-8 rounded-full bg-blue-100 border border-blue-200 flex-shrink-0" src="https://ui-avatars.com/api/?name=Admin&background=0D8ABC&color=fff" alt="政务管理员头像" width="32" height="32">
+                <div class="ml-3 overflow-hidden" x-show="sidebarOpen">
+                    <p class="text-sm font-medium text-slate-700 truncate">政务管理员</p>
+                    <div class="flex items-center text-xs text-slate-500">
+                        <span class="truncate">免费版</span>
+                        <span class="mx-1">•</span>
+                        <span class="text-blue-600">升级</span>
+                    </div>
+                </div>
+                <i data-lucide="chevron-right" class="w-4 h-4 text-slate-400 ml-auto" x-show="sidebarOpen" aria-hidden="true"></i>
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Content（无顶栏，参考图2；对话框与功能页从顶部开始整体上移） -->
+    <main id="main-content" class="flex-1 flex flex-col min-h-0 overflow-hidden bg-white relative" tabindex="-1">
+        <h1 class="sr-only">IFLY AIOS 原型演示</h1>
+
+        <!-- View: Chat -->
+        <div x-show="currentTab === 'chat'" class="flex-1 flex flex-col overflow-hidden relative">
+            
+            <!-- Messages Area（右侧预览打开时与输入框一致收窄到左半区，不被遮挡） -->
+            <div class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden py-4 transition-all duration-200"
+                 :class="[selectedHistoryId === null ? 'pb-6' : 'pb-32', sidebarOpen ? 'px-4 md:px-6' : 'px-8 md:px-16', previewOpen ? 'w-1/2 pr-2' : 'w-full']">
+                <div class="mx-auto space-y-6 transition-[max-width] duration-200"
+                     :class="sidebarOpen && previewOpen ? 'max-w-2xl' : (sidebarOpen ? 'max-w-3xl' : 'max-w-4xl')">
+                <!-- 默认首页（新建任务）：垂直居中布局 -->
+                <div x-show="selectedHistoryId === null" class="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] text-center px-4">
+                    <div class="w-full max-w-2xl">
+                        <h2 class="text-2xl md:text-3xl font-semibold text-slate-800 mb-8">我能为你做什么？</h2>
+                        <div class="w-full max-w-2xl mx-auto relative">
+                            <input type="file" id="home-file-upload" class="sr-only" accept=".xlsx,.xls,.doc,.docx,.pdf,.ppt,.pptx,.txt" @change="uploadedFile = $event.target.files[0] ? { name: $event.target.files[0].name, size: $event.target.files[0].size, type: $event.target.files[0].type } : null; $event.target.value = ''">
+                            <div class="bg-white border border-gray-200 rounded-xl shadow-lg flex flex-col focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent transition-all">
+                                <!-- 上传文件展示：居左排列 -->
+                                <div x-show="uploadedFile" class="px-4 pt-3 pb-1 flex justify-start">
+                                    <div class="inline-flex items-start gap-2 rounded-xl bg-gray-100 border border-gray-200 px-3 py-2 max-w-full">
+                                        <div class="w-9 h-9 rounded-lg bg-green-100 flex items-center justify-center flex-shrink-0 text-green-600"><i data-lucide="file-spreadsheet" class="w-5 h-5" aria-hidden="true"></i></div>
+                                        <div class="min-w-0 flex-1">
+                                            <p class="text-sm font-medium text-slate-800 truncate" x-text="uploadedFile?.name || ''"></p>
+                                            <p class="text-xs text-slate-500"><span x-text="(uploadedFile?.name && /\.(xlsx|xls)$/i.test(uploadedFile.name)) ? '电子表格' : '文档'"></span> · <span x-text="uploadedFile?.size ? (uploadedFile.size / 1024).toFixed(2) + ' KB' : ''"></span></p>
+                                        </div>
+                                        <button type="button" @click="uploadedFile = null" aria-label="移除文件" class="p-1 text-slate-400 hover:text-red-500 rounded"><i data-lucide="x" class="w-4 h-4" aria-hidden="true"></i></button>
+                                    </div>
+                                </div>
+                                <!-- @ 智能体/技能 标签 + 输入：多智能体模式下通过 @ 指定参与方 -->
+                                <div class="flex flex-wrap items-baseline gap-2 p-4 pb-0 min-h-[2.5rem]">
+                                    <template x-if="selectedHomeAgent">
+                                        <span class="skill-chip group inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-600 text-white text-sm font-medium border border-indigo-500 max-w-[12rem]">
+                                            <i data-lucide="bot" class="w-3.5 h-3.5 flex-shrink-0 text-indigo-200" aria-hidden="true"></i>
+                                            <span class="truncate" x-text="selectedHomeAgent.name"></span>
+                                            <button type="button" @click="selectedHomeAgent = null" aria-label="取消指定智能体" class="flex-shrink-0 p-0.5 rounded-full hover:bg-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity"><i data-lucide="x" class="w-3.5 h-3.5" aria-hidden="true"></i></button>
+                                        </span>
+                                    </template>
+                                    <template x-if="selectedHomeSkill">
+                                        <span class="skill-chip group inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-600 text-white text-sm font-medium border border-blue-500 max-w-[12rem]">
+                                            <i data-lucide="sparkles" class="w-3.5 h-3.5 flex-shrink-0 text-blue-200" aria-hidden="true"></i>
+                                            <span class="truncate" x-text="selectedHomeSkill.name"></span>
+                                            <button type="button" @click="selectedHomeSkill = null" aria-label="取消指定技能" class="flex-shrink-0 p-0.5 rounded-full hover:bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"><i data-lucide="x" class="w-3.5 h-3.5" aria-hidden="true"></i></button>
+                                        </span>
+                                    </template>
+                                    <textarea x-model="chatInput" rows="2" :placeholder="uploadedFile ? '告诉 AI 如何处理该文件' : (selectedHomeAgent || selectedHomeSkill ? '输入指令…' : '输入问题或指令，点击 @ 选择智能体/技能')" aria-label="输入指令"
+                                        @keydown="if ($event.key === 'Backspace' && chatInput === '' && selectedHomeSkill) { selectedHomeSkill = null; $event.preventDefault(); } if ($event.key === 'Backspace' && chatInput === '' && selectedHomeAgent) { selectedHomeAgent = null; $event.preventDefault(); }"
+                                        class="flex-1 min-w-[12rem] bg-transparent border-none focus:ring-0 focus-visible:outline-none resize-none py-1 text-sm placeholder-slate-400 align-baseline"></textarea>
+                                </div>
+                                <div class="flex justify-between items-center px-3 pb-3">
+                                    <div class="flex items-center gap-1">
+                                        <label for="home-file-upload" class="cursor-pointer p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors inline-flex" aria-label="添加附件"><i data-lucide="plus" class="w-4 h-4" aria-hidden="true"></i></label>
+                                        <button type="button" @click="showMentionPanel = true" aria-label="选择智能体或技能" aria-haspopup="dialog" :aria-expanded="showMentionPanel" class="p-2 rounded-lg transition-colors"
+                                            :class="showMentionPanel ? 'text-blue-600 bg-blue-50' : 'text-slate-400 hover:text-blue-600 hover:bg-blue-50'">
+                                            <i data-lucide="at-sign" class="w-4 h-4" aria-hidden="true"></i>
+                                        </button>
+                                        <button type="button" aria-label="语音输入" class="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><i data-lucide="mic" class="w-4 h-4" aria-hidden="true"></i></button>
+                                    </div>
+                                    <button type="button" aria-label="发送" class="bg-slate-800 text-white rounded-full p-2 hover:bg-blue-600 transition-colors"><i data-lucide="arrow-up" class="w-4 h-4" aria-hidden="true"></i></button>
+                                </div>
+                            </div>
+                            <!-- 选择智能体/技能悬浮面板（无遮罩） -->
+                            <div x-show="showMentionPanel" x-cloak @click.outside="showMentionPanel = false" @keydown.escape.window="showMentionPanel = false" class="absolute bottom-full left-0 mt-2 z-50 w-full max-w-sm max-h-[70vh] overflow-hidden flex flex-col bg-white rounded-xl border border-gray-200 shadow-xl" role="listbox" aria-label="选择智能体或技能">
+                                <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+                                    <h3 class="text-sm font-semibold text-slate-800">选择智能体或技能</h3>
+                                    <button type="button" @click="showMentionPanel = false" class="p-1.5 rounded-lg hover:bg-gray-100 text-slate-400" aria-label="关闭"><i data-lucide="x" class="w-4 h-4" aria-hidden="true"></i></button>
+                                </div>
+                                <div class="flex-1 overflow-y-auto py-2">
+                                        <div class="px-3 py-1 text-xs font-medium text-slate-400 uppercase tracking-wider">智能体</div>
+                                        <template x-for="a in mentionAgents" :key="a.id">
+                                            <button type="button" @click="selectedHomeAgent = a; showMentionPanel = false" class="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-gray-50 rounded-lg text-sm">
+                                                <i data-lucide="bot" class="w-4 h-4 text-indigo-500 flex-shrink-0" aria-hidden="true"></i>
+                                                <span class="text-slate-800" x-text="a.name"></span>
+                                            </button>
+                                        </template>
+                                        <div class="px-3 py-1 mt-2 text-xs font-medium text-slate-400 uppercase tracking-wider">技能</div>
+                                        <template x-for="sk in mentionSkills" :key="sk.id">
+                                            <button type="button" @click="selectedHomeSkill = sk; showMentionPanel = false" class="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-gray-50 rounded-lg text-sm">
+                                                <i data-lucide="sparkles" class="w-4 h-4 text-blue-500 flex-shrink-0" aria-hidden="true"></i>
+                                                <span class="text-slate-800" x-text="sk.name"></span>
+                                            </button>
+                                        </template>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex flex-wrap justify-center gap-2 mt-8 relative" @mouseleave="showMoreDropdown = false">
+                            <button type="button" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 text-slate-700 text-sm font-medium hover:border-blue-300 hover:text-blue-600 transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                                <i data-lucide="presentation" class="w-4 h-4 text-slate-500" aria-hidden="true"></i> 制作幻灯片
+                            </button>
+                            <button type="button" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 text-slate-700 text-sm font-medium hover:border-blue-300 hover:text-blue-600 transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                                <i data-lucide="bar-chart-3" class="w-4 h-4 text-slate-500" aria-hidden="true"></i> 数据分析
+                            </button>
+                            <button type="button" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 text-slate-700 text-sm font-medium hover:border-blue-300 hover:text-blue-600 transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                                <i data-lucide="lightbulb" class="w-4 h-4 text-slate-500" aria-hidden="true"></i> 头脑风暴
+                            </button>
+                            <button type="button" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 text-slate-700 text-sm font-medium hover:border-blue-300 hover:text-blue-600 transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                                <i data-lucide="globe" class="w-4 h-4 text-slate-500" aria-hidden="true"></i> 网页制作
+                            </button>
+                            <div class="relative" @mouseenter="showMoreDropdown = true">
+                                <button type="button" class="inline-flex items-center px-4 py-2.5 rounded-xl border border-gray-200 text-slate-700 text-sm font-medium hover:border-blue-300 hover:text-blue-600 transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                                    更多
+                                </button>
+                                <div x-show="showMoreDropdown" x-cloak class="absolute left-0 top-full mt-1 z-30 py-1 w-48 bg-white border border-gray-200 rounded-xl shadow-xl"
+                                    @mouseenter="showMoreDropdown = true" @mouseleave="showMoreDropdown = false">
+                                    <button type="button" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-gray-50 text-left rounded-lg"><i data-lucide="clock" class="w-4 h-4 text-slate-400" aria-hidden="true"></i> 定时任务</button>
+                                    <button type="button" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-gray-50 text-left rounded-lg"><i data-lucide="search" class="w-4 h-4 text-slate-400" aria-hidden="true"></i> Wide Research</button>
+                                    <button type="button" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-gray-50 text-left rounded-lg"><i data-lucide="table" class="w-4 h-4 text-slate-400" aria-hidden="true"></i> 电子表格</button>
+                                    <button type="button" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-gray-50 text-left rounded-lg"><i data-lucide="bar-chart-2" class="w-4 h-4 text-slate-400" aria-hidden="true"></i> 可视化</button>
+                                    <button type="button" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-gray-50 text-left rounded-lg"><i data-lucide="video" class="w-4 h-4 text-slate-400" aria-hidden="true"></i> 视频</button>
+                                    <button type="button" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-gray-50 text-left rounded-lg"><i data-lucide="music" class="w-4 h-4 text-slate-400" aria-hidden="true"></i> 音频</button>
+                                    <button type="button" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-gray-50 text-left rounded-lg"><i data-lucide="message-circle" class="w-4 h-4 text-slate-400" aria-hidden="true"></i> Chat 模式</button>
+                                    <button type="button" class="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-gray-50 text-left rounded-lg"><i data-lucide="file-text" class="w-4 h-4 text-slate-400" aria-hidden="true"></i> Playbook</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- 选了其他历史且无消息：欢迎语 + 推荐卡片 -->
+                <div x-show="selectedHistoryId !== null && !hasMessages" class="space-y-6">
+                    <div class="flex justify-start">
+                        <div class="bg-slate-100 rounded-xl rounded-tl-none px-5 py-3.5 max-w-3xl text-slate-700 text-sm leading-relaxed shadow-sm border border-gray-100">
+                            <span x-text="(new Date().getHours() < 12 ? '早上好' : new Date().getHours() < 18 ? '下午好' : '晚上好') + '！我是IFLY AIOS 助手。我可以帮你处理公文、整理会议纪要、查询政策或管理定时任务。请告诉我你需要做什么？'"></span>
+                        </div>
+                    </div>
+                    <p class="text-xs text-slate-500 px-1">推荐</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <button type="button" @click="chatInput = '帮我分析本月销售数据，生成趋势图表';" class="bg-white border border-gray-200 rounded-xl p-4 text-left shadow-sm hover:shadow-md hover:border-blue-200 transition-all focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                            <span class="text-sm font-medium text-slate-800 block">数据分析</span>
+                            <span class="text-xs text-slate-500 mt-1 block">帮我分析本月销售数据，生成趋势图表</span>
+                        </button>
+                        <button type="button" @click="chatInput = '帮我写一篇产品推广文案';" class="bg-white border border-gray-200 rounded-xl p-4 text-left shadow-sm hover:shadow-md hover:border-blue-200 transition-all focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                            <span class="text-sm font-medium text-slate-800 block">文案撰写</span>
+                            <span class="text-xs text-slate-500 mt-1 block">帮我写一篇产品推广文案</span>
+                        </button>
+                        <button type="button" @click="chatInput = '帮我安排下周的会议日程';" class="bg-white border border-gray-200 rounded-xl p-4 text-left shadow-sm hover:shadow-md hover:border-blue-200 transition-all focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                            <span class="text-sm font-medium text-slate-800 block">日程安排</span>
+                            <span class="text-xs text-slate-500 mt-1 block">帮我安排下周的会议日程</span>
+                        </button>
+                    </div>
+                </div>
+                <!-- 第一条历史对话：欢迎 + 用户 + AI -->
+                <template x-if="selectedHistoryId === 0">
+                    <div class="space-y-6">
+                <div class="flex justify-start">
+                    <div class="bg-slate-100 rounded-xl rounded-tl-none px-5 py-3.5 max-w-3xl text-slate-700 text-sm leading-relaxed shadow-sm">
+                        你好！我是IFLY AIOS 助手。我可以帮你处理公文、整理会议纪要、查询政策或管理定时任务。请告诉我你需要做什么？
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 items-end">
+                    <div class="flex flex-col items-end">
+                        <div class="bg-blue-600 text-white rounded-xl rounded-tr-none px-5 py-3.5 max-w-3xl text-sm leading-relaxed shadow-md">帮我整理今天下午的"智慧城市二期项目推进会"纪要，提取待办事项，并生成正式文档。</div>
+                        <div class="flex items-center gap-2 mt-1">
+                            <span class="text-xs text-slate-400">10:30</span>
+                            <button type="button" aria-label="收藏此条消息" class="p-1 text-slate-400 hover:text-amber-500 rounded"><i data-lucide="star" class="w-3.5 h-3.5" aria-hidden="true"></i></button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI Response Container：思考后执行，工具调用嵌在输出逻辑里 -->
+                <div class="flex flex-col space-y-4 ml-2">
+                    
+                    <!-- 状态横幅：通用表述 -->
+                    <div class="flex items-center gap-2 text-sm text-slate-600">
+                        <i data-lucide="check-circle-2" class="w-4 h-4 text-green-500" aria-hidden="true"></i>
+                        <span>正在处理任务</span>
+                    </div>
+
+                    <!-- 工具调用块：正在加载技能（带图标，可点击打开工具面板） -->
+                    <div role="button" tabindex="0" @click="openToolPanel('tc_001')" @keydown.enter.prevent="openToolPanel('tc_001')"
+                         class="flex items-center gap-2 rounded-lg bg-slate-100 border border-slate-200 px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-200 hover:border-slate-300 transition-colors cursor-pointer group">
+                        <span class="flex-shrink-0 w-4 h-4 text-slate-500" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 9.4 7.55 4.24"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span>
+                        <span>正在加载技能 'excel-generator'</span>
+                        <i data-lucide="external-link" class="w-3.5 h-3.5 text-slate-400 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true"></i>
+                    </div>
+
+                    <!-- AI 叙述（思考） -->
+                    <p class="text-sm text-slate-600 leading-relaxed">
+                        我已根据 excel-generator 技能设计了三个演示场景：1. 销售业绩分析报告 2. 项目预算跟踪表 3. 市场数据对比分析。现在，我将开始生成第一个示例：销售业绩分析报告。
+                    </p>
+
+                    <!-- 思维链：可折叠步骤，内部为 思考→执行 交替 -->
+                    <div class="border-l-2 border-gray-200 pl-4 space-y-4" x-data="{ expandedStep: 2 }">
+                        
+                        <!-- Step 1: 设计多个演示案例场景 -->
+                        <div class="group">
+                            <div role="button" tabindex="0" :aria-expanded="expandedStep === 1"
+                                    class="flex items-start cursor-pointer focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 rounded"
+                                    @click="expandedStep = expandedStep === 1 ? null : 1"
+                                    @keydown.enter.prevent="expandedStep = expandedStep === 1 ? null : 1"
+                                    @keydown.space.prevent="expandedStep = expandedStep === 1 ? null : 1">
+                                <div class="mt-0.5 mr-2 flex-shrink-0">
+                                    <i data-lucide="check-circle-2" class="w-4 h-4 text-green-500" aria-hidden="true"></i>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <h4 class="text-sm font-medium text-slate-700 group-hover:text-blue-600 transition-colors">
+                                        设计多个演示案例场景
+                                    </h4>
+                                    <p class="text-xs text-slate-500 mt-0.5 line-clamp-1" x-show="expandedStep !== 1">
+                                        已设计了三个Excel示例场景，包括销售分析、预算跟踪和市场对比。
+                                    </p>
+                                </div>
+                                <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400 transition-transform" aria-hidden="true" :class="expandedStep === 1 ? 'rotate-180' : ''"></i>
+                            </div>
+                            
+                            <!-- Expanded：叙述 + 工具调用块（嵌入式，思考后执行） -->
+                            <div x-show="expandedStep === 1" class="mt-3 ml-6 space-y-3">
+                                <p class="text-sm text-slate-600">我设计了三个Excel示例场景，包括销售分析、预算跟踪和市场对比。下一步将生成第一个示例：销售业绩分析报告。</p>
+                                
+                                <!-- 工具调用：检索（带图标，可点击打开工具面板） -->
+                                <div class="flex items-center justify-between gap-2 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 cursor-pointer group" @click="openToolPanel('tc_003')">
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <span class="flex-shrink-0 w-4 h-4 text-slate-500" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>
+                                        <span>完成检索</span>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-xs text-slate-500 flex-shrink-0">智慧城市 项目推进会 · 2个来源</span>
+                                        <i data-lucide="external-link" class="w-3 h-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true"></i>
+                                    </div>
+                                </div>
+
+                                <!-- 工具调用：阅读（带图标，可点击打开工具面板） -->
+                                <div class="flex items-center justify-between gap-2 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 cursor-pointer group" @click="openToolPanel('tc_004')">
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <span class="flex-shrink-0 w-4 h-4 text-slate-500" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></span>
+                                        <span>完成技能文件读取</span>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-xs text-slate-500 font-mono flex-shrink-0 truncate max-w-[140px]">会议记录.docx</span>
+                                        <i data-lucide="external-link" class="w-3 h-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true"></i>
+                                    </div>
+                                </div>
+
+                                <!-- 工具调用：Create（文档图标，可点击打开工具面板） -->
+                                <div class="flex items-center justify-between gap-2 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 cursor-pointer group" @click="openToolPanel('tc_001')">
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <span class="flex-shrink-0 w-4 h-4 text-slate-500" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h2"/><path d="M8 17h2"/><path d="M14 13h2"/><path d="M14 17h2"/></svg></span>
+                                        <span class="font-mono text-xs truncate">Create the first Excel example: Sales Performance Analysis</span>
+                                    </div>
+                                    <i data-lucide="external-link" class="w-3 h-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" aria-hidden="true"></i>
+                                </div>
+
+                                <!-- 工具调用：代码执行 Execute script（带图标，可点击打开工具面板） -->
+                                <div class="flex items-center justify-between gap-2 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2 text-sm text-slate-700 hover:bg-blue-50 hover:border-blue-100 cursor-pointer group" @click="openToolPanel('tc_001')">
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <span class="flex-shrink-0 w-4 h-4 text-slate-500" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17 10 11 4 5"/><path d="M12 19h8"/></svg></span>
+                                        <span class="font-mono text-xs truncate">Execute script to generate Sales Performance Analysis Excel</span>
+                                    </div>
+                                    <i data-lucide="external-link" class="w-3 h-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" aria-hidden="true"></i>
+                                </div>
+
+                                <!-- 叙述穿插 -->
+                                <p class="text-sm text-slate-600">生成销售业绩分析报告的Excel文件已成功完成，接下来计划制作项目预算跟踪表。</p>
+
+                                <!-- 工具调用：文件写入（带图标，可点击打开工具面板） -->
+                                <div class="flex items-center justify-between gap-2 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 cursor-pointer group" @click="openToolPanel('tc_002')">
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <span class="flex-shrink-0 w-4 h-4 text-slate-500" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="M9 15h6"/></svg></span>
+                                        <span>完成文件写入</span>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-xs text-slate-500 font-mono flex-shrink-0 truncate max-w-[160px]">销售业绩分析报告.xlsx</span>
+                                        <i data-lucide="external-link" class="w-3 h-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true"></i>
+                                    </div>
+                                </div>
+
+                                <!-- 工具调用：Create second（带图标，可点击打开工具面板） -->
+                                <div class="flex items-center justify-between gap-2 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 cursor-pointer group" @click="openToolPanel('tc_001')">
+                                    <span class="flex-shrink-0 w-4 h-4 text-slate-500" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h2"/><path d="M8 17h2"/><path d="M14 13h2"/><path d="M14 17h2"/></svg></span>
+                                    <span class="font-mono text-xs">Create the second Excel example: Project Budget Tracker</span>
+                                </div>
+
+                                <!-- 工具调用：Running 代码执行（带图标，可点击打开工具面板） -->
+                                <div class="flex items-center justify-between gap-2 rounded-lg bg-blue-50 border border-blue-100 px-3 py-2 text-sm text-blue-700 cursor-pointer group" @click="openToolPanel('tc_001')">
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <span class="relative flex flex-shrink-0 w-4 h-4 items-center justify-center">
+                                            <span class="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-blue-400 opacity-75"></span>
+                                            <span class="relative inline-flex h-2 w-2 rounded-full bg-blue-500"></span>
+                                        </span>
+                                        <span class="font-mono text-xs">Running: generate_budget_tracker.py</span>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-xs text-blue-500 flex-shrink-0">View Logs</span>
+                                        <i data-lucide="external-link" class="w-3 h-3 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Step 2: 向用户展示所有示例并说明特色 -->
+                        <div class="group">
+                            <div role="button" tabindex="0" :aria-expanded="expandedStep === 2"
+                                    class="flex items-start cursor-pointer focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 rounded"
+                                    @click="expandedStep = expandedStep === 2 ? null : 2"
+                                    @keydown.enter.prevent="expandedStep = expandedStep === 2 ? null : 2"
+                                    @keydown.space.prevent="expandedStep = expandedStep === 2 ? null : 2">
+                                <div class="mt-0.5 mr-2 flex-shrink-0 relative">
+                                    <div class="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" aria-hidden="true"></div>
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <h4 class="text-sm font-medium text-blue-600">
+                                        向用户展示所有示例并说明特色
+                                    </h4>
+                                </div>
+                                <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400 transition-transform" aria-hidden="true" :class="expandedStep === 2 ? 'rotate-180' : ''"></i>
+                            </div>
+
+                            <div x-show="expandedStep === 2" class="mt-3 ml-6 space-y-3">
+                                <p class="text-sm text-slate-600">已完成销售业绩分析报告的Excel文件生成，接下来计划制作项目预算跟踪表。</p>
+                                <div class="flex items-center justify-between gap-2 rounded-lg bg-blue-50 border border-blue-100 px-3 py-2 text-sm text-blue-700 cursor-pointer group" @click="openToolPanel('tc_001')">
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <span class="relative flex h-2 w-2 flex-shrink-0"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span></span>
+                                        <span class="font-mono text-xs">Running: generate_budget_tracker.py</span>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-xs text-blue-500 flex-shrink-0">View Logs</span>
+                                        <i data-lucide="external-link" class="w-3 h-3 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- 2. Human Confirmation Card (F-EXEC-02) -->
+                    <div class="bg-orange-50 border border-orange-200 rounded-xl p-4 shadow-sm max-w-md ml-6" x-show="!confirmAction">
+                        <div class="flex items-start">
+                            <div class="flex-shrink-0">
+                                <i data-lucide="alert-triangle" class="w-5 h-5 text-orange-500" aria-hidden="true"></i>
+                            </div>
+                            <div class="ml-3 w-full">
+                                <h3 class="text-sm font-medium text-orange-800">需要人工确认</h3>
+                                <div class="mt-2 text-sm text-orange-700">
+                                    <p>系统准备向以下人员发送待办事项通知（通过企业微信）：</p>
+                                    <ul class="list-disc list-inside mt-1 ml-1 text-xs">
+                                        <li>张三 (产品部) - 确认需求文档 V1.2</li>
+                                        <li>李四 (研发部) - 修复登录接口 Bug</li>
+                                    </ul>
+                                </div>
+                                <div class="mt-4 flex space-x-3">
+                                    <button type="button" @click="confirmAction = true" class="bg-orange-600 text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-orange-700 shadow-sm transition-colors focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2">
+                                        确认发送
+                                    </button>
+                                    <button type="button" class="bg-white text-slate-700 px-3 py-1.5 rounded-md text-sm font-medium border border-gray-300 hover:bg-gray-50 shadow-sm transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                                        取消
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3. Result Preview & Download (Shown after confirmation) -->
+                    <div x-show="confirmAction" class="ml-6" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 transform scale-95" x-transition:enter-end="opacity-100 transform scale-100">
+                        <!-- Text Response -->
+                        <div class="bg-white rounded-xl rounded-tl-none px-5 py-3.5 text-slate-700 text-sm leading-relaxed shadow-sm border border-gray-100">
+                            <p>已完成。会议纪要已生成，并已通过企业微信通知相关负责人。</p>
+                        </div>
+
+                        <!-- Artifact Card -->
+                        <div class="mt-3 flex items-center p-3 bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow max-w-sm cursor-pointer group">
+                            <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                <i data-lucide="file-text" class="w-5 h-5" aria-hidden="true"></i>
+                            </div>
+                            <div class="ml-3 flex-1">
+                                <p class="text-sm font-medium text-slate-900">2026-03-02_智慧城市二期项目推进会纪要.docx</p>
+                                <p class="text-xs text-slate-500">245 KB • Word 文档</p>
+                            </div>
+                            <button type="button" aria-label="下载文档" class="p-2 text-slate-400 hover:text-blue-600 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 rounded">
+                                <i data-lucide="download" class="w-5 h-5" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                </div>
+                </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Preview Panel (Overlay) -->
+            <div x-show="previewOpen" 
+                 x-transition:enter="transition ease-out duration-300"
+                 x-transition:enter-start="translate-x-full"
+                 x-transition:enter-end="translate-x-0"
+                 x-transition:leave="transition ease-in duration-200"
+                 x-transition:leave-start="translate-x-0"
+                 x-transition:leave-end="translate-x-full"
+                 class="absolute top-0 right-0 w-1/2 h-full bg-white shadow-2xl border-l border-gray-200 z-20 flex flex-col overscroll-contain"
+                 style="display: none;"
+                 role="dialog"
+                 aria-modal="true"
+                 :aria-label="'预览：' + previewTitle">
+                
+                <!-- Preview Header -->
+                <div class="h-14 border-b border-gray-100 flex items-center justify-between px-4 bg-gray-50">
+                    <div class="flex items-center space-x-2">
+                        <template x-if="stepDetailType === 'skill'"><i data-lucide="package" class="w-4 h-4 text-slate-500" aria-hidden="true"></i></template>
+                        <template x-if="stepDetailType === 'retrieve'"><i data-lucide="search" class="w-4 h-4 text-slate-500" aria-hidden="true"></i></template>
+                        <template x-if="stepDetailType === 'read'"><i data-lucide="book-open" class="w-4 h-4 text-slate-500" aria-hidden="true"></i></template>
+                        <template x-if="stepDetailType === 'file'"><i data-lucide="file-output" class="w-4 h-4 text-slate-500" aria-hidden="true"></i></template>
+                        <template x-if="stepDetailType === 'code'"><i data-lucide="terminal" class="w-4 h-4 text-slate-500" aria-hidden="true"></i></template>
+                        <span class="text-sm font-medium text-slate-700" x-text="previewTitle">Script Preview</span>
+                    </div>
+                    <button type="button" @click="previewOpen = false" aria-label="关闭预览" class="text-slate-400 hover:text-slate-600 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 rounded p-1">
+                        <i data-lucide="x" class="w-5 h-5" aria-hidden="true"></i>
+                    </button>
+                </div>
+
+                <!-- 加载技能：执行过程 -->
+                <div x-show="stepDetailType === 'skill'" class="flex-1 overflow-y-auto p-4 space-y-3" style="display: none;">
+                    <div class="flex items-center gap-2 text-sm text-slate-600">
+                        <span class="relative flex h-2 w-2"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span></span>
+                        正在加载技能 'excel-generator'
+                    </div>
+                    <div class="rounded-lg bg-slate-50 border border-slate-100 p-3 font-mono text-xs text-slate-600 space-y-1">
+                        <div>[INFO] Resolving skill: excel-generator</div>
+                        <div>[INFO] Loaded manifest: excel-generator v1.0</div>
+                        <div>[OK] Dependencies: openpyxl, pandas</div>
+                        <div>[OK] Skill ready.</div>
+                    </div>
+                </div>
+
+                <!-- 检索：执行过程 -->
+                <div x-show="stepDetailType === 'retrieve'" class="flex-1 overflow-y-auto p-4 space-y-3" style="display: none;">
+                    <p class="text-sm text-slate-600">检索关键词：<code class="bg-slate-100 px-1 rounded">智慧城市 项目推进会 纪要</code></p>
+                    <ul class="space-y-2 text-sm text-slate-600">
+                        <li class="flex items-start gap-2 p-2 bg-slate-50 rounded-lg border border-slate-100">
+                            <i data-lucide="file-text" class="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5"></i>
+                            <span>内部文档：智慧城市二期项目推进会会议记录.docx（相关度 0.92）</span>
+                        </li>
+                        <li class="flex items-start gap-2 p-2 bg-slate-50 rounded-lg border border-slate-100">
+                            <i data-lucide="file-text" class="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5"></i>
+                            <span>政策库：智慧城市建设指南（相关度 0.78）</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- 阅读：执行过程 -->
+                <div x-show="stepDetailType === 'read'" class="flex-1 overflow-y-auto p-4 space-y-3" style="display: none;">
+                    <p class="text-sm text-slate-600">正在阅读文档片段：</p>
+                    <div class="rounded-lg bg-amber-50 border border-amber-100 p-3 text-sm text-slate-700 leading-relaxed">
+                        「……会议确定下一阶段重点为需求确认与接口联调。产品部张三负责需求文档 V1.2 终稿，研发部李四负责登录接口 Bug 修复，截止日期 3 月 10 日……」
+                    </div>
+                </div>
+
+                <!-- 文件写入：执行过程 -->
+                <div x-show="stepDetailType === 'file'" class="flex-1 overflow-y-auto p-4 space-y-3" style="display: none;">
+                    <ul class="space-y-2 text-sm">
+                        <li class="flex items-center gap-2 text-green-700"><i data-lucide="check-circle" class="w-4 h-4 text-green-500"></i> 写入成功：output/销售业绩分析报告.xlsx</li>
+                        <li class="flex items-center gap-2 text-slate-500"><span class="relative flex h-2 w-2"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span></span> 正在写入：output/项目预算跟踪表.xlsx</li>
+                    </ul>
+                </div>
+
+                <!-- 代码执行：Preview Content (Mock Code) -->
+                <div x-show="stepDetailType === 'code'" class="flex-1 overflow-y-auto p-4 bg-slate-900 text-gray-300 font-mono text-xs" style="display: none;">
+                    <pre><code>import pandas as pd
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill
+
+# --- Theme Configuration (Forest Green) ---
+theme = {
+    'primary': '2E5A4C',
+    'light': 'D4E4D7',
+    'accent': '2E5A4C',
+    'white': 'FFFFFF'
+}
+
+def generate_budget_tracker():
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Project Budget"
+
+    # Headers
+    headers = ["Item", "Budget", "Actual", "Variance"]
+    ws.append(headers)
+
+    # ... (more code) ...
+
+    print("Generating Excel file...")
+    wb.save("Project_Budget_Tracker.xlsx")
+    print("Done.")</code></pre>
+                </div>
+            </div>
+
+            <!-- Tool Calls Panel (工具调用链路面板) -->
+            <div x-show="showToolPanel"
+                 x-transition:enter="transition ease-out duration-300"
+                 x-transition:enter-start="translate-x-full"
+                 x-transition:enter-end="translate-x-0"
+                 x-transition:leave="transition ease-in duration-200"
+                 x-transition:leave-start="translate-x-0"
+                 x-transition:leave-end="translate-x-full"
+                 class="absolute top-0 right-0 w-1/2 h-full bg-white shadow-2xl border-l border-gray-200 z-20 flex flex-col overscroll-contain"
+                 style="display: none;"
+                 role="dialog"
+                 aria-modal="true"
+                 aria-label="工具调用链路">
+
+                <!-- Tool Panel Header -->
+                <div class="h-14 border-b border-gray-100 flex items-center justify-between px-4 bg-gray-50 flex-shrink-0">
+                    <div class="flex items-center space-x-2">
+                        <i data-lucide="wrench" class="w-4 h-4 text-slate-500" aria-hidden="true"></i>
+                        <span class="text-sm font-medium text-slate-700">工具调用链路</span>
+                        <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-slate-200 text-slate-600" x-text="toolCallStats.total + ' 个工具'"></span>
+                    </div>
+                    <button type="button" @click="closeToolPanel()" aria-label="关闭面板" class="text-slate-400 hover:text-slate-600 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 rounded p-1">
+                        <i data-lucide="x" class="w-5 h-5" aria-hidden="true"></i>
+                    </button>
+                </div>
+
+                <!-- Tool Panel Content -->
+                <div class="flex-1 flex overflow-hidden">
+                    <!-- Left: Tool List -->
+                    <div class="w-72 border-r border-gray-100 flex flex-col bg-slate-50/50 flex-shrink-0">
+                        <!-- Stats Cards -->
+                        <div class="p-3 grid grid-cols-2 gap-2 flex-shrink-0">
+                            <div class="bg-white rounded-lg p-2 border border-gray-100">
+                                <div class="text-lg font-semibold text-green-600" x-text="toolCallStats.success"></div>
+                                <div class="text-xs text-slate-500">成功</div>
+                            </div>
+                            <div class="bg-white rounded-lg p-2 border border-gray-100">
+                                <div class="text-lg font-semibold text-blue-600" x-text="toolCallStats.running"></div>
+                                <div class="text-xs text-slate-500">运行中</div>
+                            </div>
+                            <div class="bg-white rounded-lg p-2 border border-gray-100">
+                                <div class="text-lg font-semibold text-amber-600" x-text="toolCallStats.pending"></div>
+                                <div class="text-xs text-slate-500">等待中</div>
+                            </div>
+                            <div class="bg-white rounded-lg p-2 border border-gray-100">
+                                <div class="text-lg font-semibold text-red-600" x-text="toolCallStats.error"></div>
+                                <div class="text-xs text-slate-500">失败</div>
+                            </div>
+                        </div>
+
+                        <!-- Filter Tabs -->
+                        <div class="px-3 pb-2 flex gap-1 flex-shrink-0">
+                            <button type="button" @click="toolFilter = 'all'" class="px-2 py-1 text-xs font-medium rounded-md transition-colors" :class="toolFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 hover:bg-gray-100'">全部</button>
+                            <button type="button" @click="toolFilter = 'success'" class="px-2 py-1 text-xs font-medium rounded-md transition-colors" :class="toolFilter === 'success' ? 'bg-green-600 text-white' : 'bg-white text-slate-600 hover:bg-gray-100'">成功</button>
+                            <button type="button" @click="toolFilter = 'pending'" class="px-2 py-1 text-xs font-medium rounded-md transition-colors" :class="toolFilter === 'pending' ? 'bg-amber-600 text-white' : 'bg-white text-slate-600 hover:bg-gray-100'">等待</button>
+                            <button type="button" @click="toolFilter = 'error'" class="px-2 py-1 text-xs font-medium rounded-md transition-colors" :class="toolFilter === 'error' ? 'bg-red-600 text-white' : 'bg-white text-slate-600 hover:bg-gray-100'">失败</button>
+                        </div>
+
+                        <!-- Tool List -->
+                        <div class="flex-1 overflow-y-auto p-2 space-y-1">
+                            <template x-for="tc in toolCallsByFilter" :key="tc.id">
+                                <button type="button" @click="selectedToolId = tc.id"
+                                        class="w-full text-left p-2.5 rounded-lg border transition-all"
+                                        :class="selectedToolId === tc.id ? 'bg-white border-blue-300 shadow-sm ring-1 ring-blue-200' : 'bg-white border-gray-100 hover:border-gray-200 hover:bg-gray-50'">
+                                    <div class="flex items-start gap-2">
+                                        <div class="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0"
+                                             :class="getToolBgColor(tc.type)">
+                                            <i :data-lucide="getToolIcon(tc.type)" class="w-3.5 h-3.5" :class="getToolIconColor(tc.type)" aria-hidden="true"></i>
+                                        </div>
+                                        <div class="flex-1 min-w-0">
+                                            <div class="flex items-center gap-1.5">
+                                                <span class="text-sm font-medium text-slate-700 truncate" x-text="tc.displayName"></span>
+                                                <span x-show="tc.status === 'running'" class="relative flex h-2 w-2 flex-shrink-0">
+                                                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                                    <span class="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                                                </span>
+                                            </div>
+                                            <div class="flex items-center gap-2 mt-0.5">
+                                                <span class="text-xs text-slate-400" x-text="tc.startTime"></span>
+                                                <span x-show="tc.duration" class="text-xs text-slate-400" x-text="formatDuration(tc.duration)"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="mt-1.5 flex items-center gap-1.5">
+                                        <span class="px-1.5 py-0.5 text-[10px] font-medium rounded"
+                                              :class="{
+                                                  'bg-green-100 text-green-700': tc.status === 'success',
+                                                  'bg-blue-100 text-blue-700': tc.status === 'running',
+                                                  'bg-amber-100 text-amber-700': tc.status === 'pending',
+                                                  'bg-red-100 text-red-700': tc.status === 'error'
+                                              }"
+                                              x-text="tc.status === 'success' ? '成功' : tc.status === 'running' ? '运行中' : tc.status === 'pending' ? '等待中' : '失败'"></span>
+                                        <span class="text-xs text-slate-400 truncate" x-text="tc.stepName"></span>
+                                    </div>
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Right: Tool Detail -->
+                    <div class="flex-1 flex flex-col min-w-0 bg-white">
+                        <template x-if="selectedToolId">
+                            <div class="flex-1 overflow-y-auto">
+                                <template x-for="tc in toolCalls.filter(t => t.id === selectedToolId)" :key="tc.id">
+                                    <div class="p-5 space-y-5">
+                                        <!-- Tool Header -->
+                                        <div class="flex items-start gap-3">
+                                            <div class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                                                 :class="getToolBgColor(tc.type)">
+                                                <i :data-lucide="getToolIcon(tc.type)" class="w-5 h-5" :class="getToolIconColor(tc.type)" aria-hidden="true"></i>
+                                            </div>
+                                            <div class="flex-1">
+                                                <h3 class="text-base font-semibold text-slate-800" x-text="tc.displayName"></h3>
+                                                <p class="text-sm text-slate-500" x-text="tc.toolName"></p>
+                                                <div class="flex items-center gap-3 mt-1.5">
+                                                    <span class="px-2 py-0.5 text-xs font-medium rounded-full"
+                                                          :class="{
+                                                              'bg-green-100 text-green-700': tc.status === 'success',
+                                                              'bg-blue-100 text-blue-700': tc.status === 'running',
+                                                              'bg-amber-100 text-amber-700': tc.status === 'pending',
+                                                              'bg-red-100 text-red-700': tc.status === 'error'
+                                                          }"
+                                                          x-text="tc.status === 'success' ? '执行成功' : tc.status === 'running' ? '执行中' : tc.status === 'pending' ? '等待确认' : '执行失败'"></span>
+                                                    <span class="text-xs text-slate-400">所属步骤：<span x-text="tc.stepName"></span></span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Time Info -->
+                                        <div class="grid grid-cols-3 gap-3">
+                                            <div class="bg-slate-50 rounded-lg p-3 border border-gray-100">
+                                                <div class="text-xs text-slate-400 mb-1">调用时间</div>
+                                                <div class="text-sm font-medium text-slate-700" x-text="tc.startTime"></div>
+                                            </div>
+                                            <div class="bg-slate-50 rounded-lg p-3 border border-gray-100">
+                                                <div class="text-xs text-slate-400 mb-1">执行耗时</div>
+                                                <div class="text-sm font-medium text-slate-700" x-text="formatDuration(tc.duration)"></div>
+                                            </div>
+                                            <div class="bg-slate-50 rounded-lg p-3 border border-gray-100">
+                                                <div class="text-xs text-slate-400 mb-1">工具类别</div>
+                                                <div class="text-sm font-medium text-slate-700" x-text="tc.category"></div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Input Params -->
+                                        <div>
+                                            <div class="flex items-center gap-2 mb-2">
+                                                <i data-lucide="arrow-right-circle" class="w-4 h-4 text-blue-500" aria-hidden="true"></i>
+                                                <h4 class="text-sm font-medium text-slate-700">输入参数</h4>
+                                            </div>
+                                            <div class="bg-slate-50 rounded-lg border border-gray-100 p-3 overflow-x-auto">
+                                                <pre class="text-xs font-mono text-slate-600"><code x-text="JSON.stringify(tc.input, null, 2)"></code></pre>
+                                            </div>
+                                        </div>
+
+                                        <!-- Output Result -->
+                                        <div x-show="tc.output">
+                                            <div class="flex items-center gap-2 mb-2">
+                                                <i data-lucide="arrow-left-circle" class="w-4 h-4 text-green-500" aria-hidden="true"></i>
+                                                <h4 class="text-sm font-medium text-slate-700">执行结果</h4>
+                                            </div>
+                                            <div class="bg-green-50 rounded-lg border border-green-100 p-3">
+                                                <template x-if="tc.output?.fileName">
+                                                    <div class="flex items-center gap-2 p-2 bg-white rounded border border-green-100">
+                                                        <i data-lucide="file-text" class="w-4 h-4 text-green-600 flex-shrink-0"></i>
+                                                        <div class="flex-1 min-w-0">
+                                                            <div class="text-sm font-medium text-slate-700" x-text="tc.output.fileName"></div>
+                                                            <div class="text-xs text-slate-500" x-text="formatBytes(tc.output.size)"></div>
+                                                        </div>
+                                                        <button type="button" class="p-1.5 text-slate-400 hover:text-blue-600 rounded">
+                                                            <i data-lucide="download" class="w-4 h-4"></i>
+                                                        </button>
+                                                    </div>
+                                                </template>
+                                                <template x-if="!tc.output?.fileName">
+                                                    <pre class="text-xs font-mono text-slate-600"><code x-text="JSON.stringify(tc.output, null, 2)"></code></pre>
+                                                </template>
+                                            </div>
+                                        </div>
+
+                                        <!-- Context Info -->
+                                        <div class="pt-4 border-t border-gray-100">
+                                            <div class="flex items-center gap-2 text-xs text-slate-400">
+                                                <i data-lucide="link" class="w-3.5 h-3.5" aria-hidden="true"></i>
+                                                <span>关联消息：<span x-text="tc.messageId"></span></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                        <template x-if="!selectedToolId">
+                            <div class="flex-1 flex items-center justify-center text-slate-400">
+                                <div class="text-center">
+                                    <i data-lucide="wrench" class="w-12 h-12 mx-auto mb-3 text-slate-200" aria-hidden="true"></i>
+                                    <p class="text-sm">选择左侧工具查看详情</p>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Input Area（与首页逻辑一致：chip + @ 选择智能体/技能 + 发送） -->
+            <div x-show="selectedHistoryId !== null" class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-white via-white to-transparent pt-10 pb-4 transition-all duration-200 z-10"
+                 :class="[previewOpen ? 'w-1/2 pr-2' : 'w-full', sidebarOpen ? 'px-4 md:px-6' : 'px-8 md:px-16']">
+                <div class="mx-auto relative transition-all duration-200"
+                     :class="previewOpen ? 'max-w-2xl' : (sidebarOpen ? 'max-w-3xl' : 'max-w-4xl')">
+
+                    <!-- 工具调用状态条（会话级别） -->
+                    <div class="flex items-center gap-2 mb-2 px-1">
+                        <button type="button" @click="showToolPanel = true; selectedToolId = toolCalls[0]?.id"
+                                class="flex items-center gap-2 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg px-3 py-1.5 transition-colors">
+                            <i data-lucide="wrench" class="w-3 h-3 text-slate-500" aria-hidden="true"></i>
+                            <span>已调用 <span x-text="toolCallStats.total"></span> 个工具</span>
+                        </button>
+                    </div>
+                    <div class="bg-white border border-gray-200 rounded-xl shadow-lg flex flex-col focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent transition-all">
+                        <div class="flex flex-wrap items-baseline gap-2 p-4 pb-0 min-h-[2.5rem]">
+                            <template x-if="selectedHomeAgent">
+                                <span class="skill-chip group inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-indigo-600 text-white text-sm font-medium border border-indigo-500 max-w-[12rem]">
+                                    <i data-lucide="bot" class="w-3.5 h-3.5 flex-shrink-0 text-indigo-200" aria-hidden="true"></i>
+                                    <span class="truncate" x-text="selectedHomeAgent.name"></span>
+                                    <button type="button" @click="selectedHomeAgent = null" aria-label="取消指定智能体" class="flex-shrink-0 p-0.5 rounded-full hover:bg-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity"><i data-lucide="x" class="w-3.5 h-3.5" aria-hidden="true"></i></button>
+                                </span>
+                            </template>
+                            <template x-if="selectedHomeSkill">
+                                <span class="skill-chip group inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-600 text-white text-sm font-medium border border-blue-500 max-w-[12rem]">
+                                    <i data-lucide="sparkles" class="w-3.5 h-3.5 flex-shrink-0 text-blue-200" aria-hidden="true"></i>
+                                    <span class="truncate" x-text="selectedHomeSkill.name"></span>
+                                    <button type="button" @click="selectedHomeSkill = null" aria-label="取消指定技能" class="flex-shrink-0 p-0.5 rounded-full hover:bg-blue-500 opacity-0 group-hover:opacity-100 transition-opacity"><i data-lucide="x" class="w-3.5 h-3.5" aria-hidden="true"></i></button>
+                                </span>
+                            </template>
+                            <textarea x-model="chatInput" rows="2" :placeholder="selectedHomeAgent || selectedHomeSkill ? '输入指令…' : '输入问题或指令，点击 @ 选择智能体/技能'" aria-label="输入指令"
+                                @keydown="if ($event.key === 'Backspace' && chatInput === '' && selectedHomeSkill) { selectedHomeSkill = null; $event.preventDefault(); } if ($event.key === 'Backspace' && chatInput === '' && selectedHomeAgent) { selectedHomeAgent = null; $event.preventDefault(); }"
+                                class="flex-1 min-w-[12rem] bg-transparent border-none focus:ring-0 focus-visible:outline-none resize-none py-1 text-sm placeholder-slate-400 align-baseline max-h-32"></textarea>
+                        </div>
+                        <div class="flex justify-between items-center px-3 pb-3">
+                            <div class="flex items-center gap-1">
+                                <label class="cursor-pointer p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors inline-flex" aria-label="添加附件"><i data-lucide="paperclip" class="w-4 h-4" aria-hidden="true"></i></label>
+                                <button type="button" @click="showMentionPanel = true" aria-label="选择智能体或技能" class="p-2 rounded-lg transition-colors" :class="showMentionPanel ? 'text-blue-600 bg-blue-50' : 'text-slate-400 hover:text-blue-600 hover:bg-blue-50'">
+                                    <i data-lucide="at-sign" class="w-4 h-4" aria-hidden="true"></i>
+                                </button>
+                                <button type="button" aria-label="语音输入" class="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><i data-lucide="mic" class="w-4 h-4" aria-hidden="true"></i></button>
+                            </div>
+                            <button type="button" aria-label="发送" class="bg-slate-800 text-white rounded-full p-2 hover:bg-blue-600 transition-colors"><i data-lucide="arrow-up" class="w-4 h-4" aria-hidden="true"></i></button>
+                        </div>
+                    </div>
+                    <!-- 选择智能体/技能悬浮面板（与首页共用逻辑，无遮罩） -->
+                    <div x-show="showMentionPanel" x-cloak @click.outside="showMentionPanel = false" @keydown.escape.window="showMentionPanel = false" class="absolute bottom-full left-0 mt-2 z-50 w-full max-w-sm max-h-[70vh] overflow-hidden flex flex-col bg-white rounded-xl border border-gray-200 shadow-xl" role="listbox" aria-label="选择智能体或技能">
+                        <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+                            <h3 class="text-sm font-semibold text-slate-800">选择智能体或技能</h3>
+                            <button type="button" @click="showMentionPanel = false" class="p-1.5 rounded-lg hover:bg-gray-100 text-slate-400" aria-label="关闭"><i data-lucide="x" class="w-4 h-4" aria-hidden="true"></i></button>
+                        </div>
+                        <div class="flex-1 overflow-y-auto py-2">
+                            <div class="px-3 py-1 text-xs font-medium text-slate-400 uppercase tracking-wider">智能体</div>
+                            <template x-for="a in mentionAgents" :key="a.id">
+                                <button type="button" @click="selectedHomeAgent = a; showMentionPanel = false" class="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-gray-50 rounded-lg text-sm">
+                                    <i data-lucide="bot" class="w-4 h-4 text-indigo-500 flex-shrink-0" aria-hidden="true"></i>
+                                    <span class="text-slate-800" x-text="a.name"></span>
+                                </button>
+                            </template>
+                            <div class="px-3 py-1 mt-2 text-xs font-medium text-slate-400 uppercase tracking-wider">技能</div>
+                            <template x-for="sk in mentionSkills" :key="sk.id">
+                                <button type="button" @click="selectedHomeSkill = sk; showMentionPanel = false" class="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-gray-50 rounded-lg text-sm">
+                                    <i data-lucide="sparkles" class="w-4 h-4 text-blue-500 flex-shrink-0" aria-hidden="true"></i>
+                                    <span class="text-slate-800" x-text="sk.name"></span>
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                    <div class="text-center mt-2 text-xs text-slate-400">
+                        AI 生成内容可能存在错误，请核查重要信息。
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- View: Agents（列表 | Agent 配置页） -->
+        <div x-show="currentTab === 'agents'" class="flex-1 flex flex-col overflow-hidden bg-gray-50">
+            <!-- 智能体列表（未选中任一 Agent 时显示） -->
+            <div x-show="!selectedAgentId" class="flex-1 overflow-y-auto">
+                <div class="max-w-6xl mx-auto px-6 py-6">
+                    <div class="flex justify-between items-center gap-4 mb-5">
+                        <h2 class="text-xl font-semibold text-slate-800">智能体</h2>
+                        <button type="button" @click="showAgentCreateModal = true; agentCreateStep = 'input'; agentCreateInput = ''" class="flex-shrink-0 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                            <i data-lucide="plus" class="w-4 h-4" aria-hidden="true"></i> 新建 Agent
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                        <template x-for="a in agentList" :key="a.id">
+                            <button type="button" @click="selectedAgentId = a.id; selectedAgentName = a.name; selectedAgentSubtitle = a.subtitle; selectedAgentType = a.type; agentConfigTab = 'files'; selectedAgentFile = null"
+                                    class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm hover:shadow-md transition-shadow text-left focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                                <div class="flex items-start justify-between gap-2">
+                                    <div class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" :class="a.iconBg + ' ' + a.iconColor">
+                                        <i :data-lucide="a.icon" class="w-5 h-5" aria-hidden="true"></i>
+                                    </div>
+                                    <div class="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
+                                        <span class="px-2 py-0.5 text-xs font-medium rounded-full" :class="a.type === 'main' ? 'bg-blue-100 text-blue-800' : (a.type === 'builtin' ? 'bg-slate-100 text-slate-700' : 'bg-purple-100 text-purple-800')" x-text="a.type === 'main' ? '主Agent' : (a.type === 'builtin' ? '内置' : '自定义')"></span>
+                                        <span class="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full" x-text="a.status"></span>
+                                    </div>
+                                </div>
+                                <h3 class="mt-3 text-base font-semibold text-slate-800 leading-tight" x-text="a.name"></h3>
+                                <p class="mt-1.5 text-sm text-slate-500 line-clamp-2 leading-snug" x-text="a.subtitle"></p>
+                                <p class="mt-3 text-xs text-slate-400 tabular-nums">调用 <span x-text="a.callCount"></span> 次</p>
+                            </button>
+                        </template>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Agent 配置页（选中某 Agent 时显示） -->
+            <div x-show="selectedAgentId" class="flex-1 flex flex-col overflow-hidden" style="display: none;">
+                <!-- 顶栏：返回 + Agent 名称 + 副标题 -->
+                <header class="flex-shrink-0 border-b border-gray-200 bg-white px-6 py-4">
+                    <div class="flex items-center gap-4 min-w-0">
+                        <button type="button" @click="selectedAgentId = null; selectedAgentName = ''; selectedAgentSubtitle = ''; selectedAgentType = 'main'"
+                                aria-label="返回智能体列表"
+                                class="flex-shrink-0 p-2 text-slate-500 hover:text-slate-700 hover:bg-gray-100 rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                            <i data-lucide="arrow-left" class="w-5 h-5" aria-hidden="true"></i>
+                        </button>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <h1 class="text-lg font-semibold text-slate-800 truncate" x-text="selectedAgentName"></h1>
+                                <span x-show="selectedAgentType === 'builtin'" class="px-2 py-0.5 text-xs font-medium rounded-full bg-slate-100 text-slate-600 flex-shrink-0">只读</span>
+                            </div>
+                            <p class="text-xs text-slate-500 truncate mt-0.5" x-text="selectedAgentSubtitle"></p>
+                        </div>
+                        <div class="flex items-center gap-2 flex-shrink-0" x-show="selectedAgentType !== 'builtin'">
+                            <button type="button" class="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-slate-600 hover:bg-slate-50">依赖检查</button>
+                            <button type="button" class="px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700">发布</button>
+                        </div>
+                    </div>
+                </header>
+
+                <!-- 智能体概述：大模型、状态、调用、文件数（字体字号对齐优化） -->
+                <div class="flex-shrink-0 border-b border-gray-200 bg-white px-6 py-3">
+                    <div class="flex flex-wrap items-center gap-6">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-medium text-slate-400 uppercase tracking-wider w-14">大模型</span>
+                            <select x-model="agentModel" :disabled="selectedAgentType === 'builtin'" class="px-2.5 py-1.5 border border-gray-200 rounded-lg text-sm font-medium text-slate-800 focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-60 disabled:cursor-not-allowed" aria-label="选择大模型">
+                                <option value="spark-4">讯飞星火 4.0</option>
+                                <option value="spark-3.5">讯飞星火 3.5</option>
+                            </select>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-medium text-slate-400 uppercase tracking-wider w-14">状态</span>
+                            <span class="text-sm font-medium text-slate-800">运行中</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-medium text-slate-400 uppercase tracking-wider w-14">总调用</span>
+                            <span class="text-sm font-medium text-slate-800 tabular-nums">1,234</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-medium text-slate-400 uppercase tracking-wider w-14">近 7 日</span>
+                            <span class="text-sm font-medium text-slate-800 tabular-nums">89</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-medium text-slate-400 uppercase tracking-wider w-14">本 Agent</span>
+                            <span class="text-sm font-medium text-slate-800">2 技能 · 3 工具 · 7 文件</span>
+                        </div>
+                        <p class="text-xs text-slate-400 font-mono truncate ml-auto" title="工作区">工作区 /home/admin/.openclaw/workspace-<span x-text="selectedAgentId"></span></p>
+                    </div>
+                </div>
+
+                <!-- 页签：text-sm font-medium，与内容区统一 px-6 -->
+                <div class="flex-shrink-0 border-b border-gray-200 bg-white">
+                    <nav class="flex items-end gap-0 px-6" aria-label="Agent 配置">
+                        <button type="button" @click="agentConfigTab = 'files'; selectedAgentFile = null"
+                                class="px-4 py-3 text-sm font-medium border-b-2 transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 -mb-px"
+                                :class="agentConfigTab === 'files' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-600 hover:text-slate-800 hover:border-gray-200'">
+                            Agent 文件
+                        </button>
+                        <button type="button" @click="agentConfigTab = 'skills'"
+                                class="px-4 py-3 text-sm font-medium border-b-2 transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 -mb-px"
+                                :class="agentConfigTab === 'skills' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-600 hover:text-slate-800 hover:border-gray-200'">
+                            Skills
+                        </button>
+                        <button type="button" @click="agentConfigTab = 'tools'"
+                                class="px-4 py-3 text-sm font-medium border-b-2 transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 -mb-px"
+                                :class="agentConfigTab === 'tools' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-600 hover:text-slate-800 hover:border-gray-200'">
+                            Tools
+                        </button>
+                    </nav>
+                </div>
+                <!-- 页签内容区：左侧配置（文件/Skill/Tool 单层 Tab）+ 右侧沙箱 -->
+                <div class="flex-1 flex gap-4 min-h-0 p-5 bg-slate-50/80">
+                    <!-- 左：配置区（无内层 Tab） -->
+                    <div class="flex-1 flex flex-col bg-white rounded-xl border border-slate-200 shadow-sm min-w-0 overflow-hidden">
+                        <!-- 文件：水平子 Tab + 编辑区 -->
+                        <div x-show="agentConfigTab === 'files'" class="flex-1 flex flex-col min-h-0">
+                            <div class="flex items-center border-b border-gray-50 px-1 overflow-x-auto flex-shrink-0">
+                                <template x-for="tab in ['agent.md','soul.md','tools.md','memory.md','identity.md','user.md']" :key="tab">
+                                    <button type="button" @click="agentEditorTab = tab" class="px-3 py-2 text-xs whitespace-nowrap flex-shrink-0 border-b-2 transition-colors" :class="agentEditorTab === tab ? 'border-blue-500 text-blue-600 font-medium' : 'border-transparent text-slate-500'" x-text="tab"></button>
+                                </template>
+                            </div>
+                            <textarea :readonly="selectedAgentType === 'builtin'" class="flex-1 w-full p-4 text-slate-700 bg-transparent border-none focus:ring-0 font-mono text-sm resize-none min-h-[12rem]" :class="selectedAgentType === 'builtin' && 'cursor-default bg-slate-50/50'" spellcheck="false" :placeholder="selectedAgentType === 'builtin' ? '' : ('# 编辑 ' + agentEditorTab + '…')" aria-label="Agent 文件编辑器">## 角色定义
+你是一位政务全科专家，擅长为政务工作人员提供政策查询、公文写作、数据分析等方面的专业支持。
+
+## 核心职责
+- 准确回答政策法规相关问题
+- 辅助撰写和润色公文材料</textarea>
+                        </div>
+                        <!-- Skills：搜索 + 勾选列表 -->
+                        <div x-show="agentConfigTab === 'skills'" class="flex-1 overflow-y-auto p-4 space-y-1">
+                            <div class="mb-3">
+                                <input type="search" placeholder="搜索 Skill…" :disabled="selectedAgentType === 'builtin'" class="w-full text-xs px-3 py-2 bg-slate-50 border border-gray-200 rounded-lg" autocomplete="off" aria-label="搜索 Skill">
+                            </div>
+                            <template x-for="item in mountableSkills" :key="item.name">
+                                <label class="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-transparent" :class="[item.mounted && 'border-blue-100 bg-blue-50/50', selectedAgentType === 'builtin' ? 'cursor-default' : 'hover:bg-slate-50 cursor-pointer']">
+                                    <input type="checkbox" x-model="item.mounted" :disabled="selectedAgentType === 'builtin'" class="w-4 h-4 rounded border-gray-300 text-blue-600">
+                                    <div class="min-w-0 flex-1">
+                                        <div class="text-sm font-medium text-slate-700 truncate" x-text="item.name"></div>
+                                        <div class="text-xs text-slate-400" x-text="item.type"></div>
+                                    </div>
+                                    <span x-show="item.mounted" class="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-800">已挂载</span>
+                                </label>
+                            </template>
+                        </div>
+                        <!-- Tools：搜索 + 勾选列表 -->
+                        <div x-show="agentConfigTab === 'tools'" class="flex-1 overflow-y-auto p-4 space-y-1">
+                            <div class="mb-3">
+                                <input type="search" placeholder="搜索 Tool…" :disabled="selectedAgentType === 'builtin'" class="w-full text-xs px-3 py-2 bg-slate-50 border border-gray-200 rounded-lg" autocomplete="off" aria-label="搜索 Tool">
+                            </div>
+                            <template x-for="item in mountableTools" :key="item.name">
+                                <label class="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-transparent" :class="[item.mounted && 'border-blue-100 bg-blue-50/50', selectedAgentType === 'builtin' ? 'cursor-default' : 'hover:bg-slate-50 cursor-pointer']">
+                                    <input type="checkbox" x-model="item.mounted" :disabled="selectedAgentType === 'builtin'" class="w-4 h-4 rounded border-gray-300 text-blue-600">
+                                    <div class="min-w-0 flex-1">
+                                        <div class="text-sm font-medium text-slate-700 truncate" x-text="item.name"></div>
+                                        <div class="text-xs text-slate-400" x-text="item.type"></div>
+                                    </div>
+                                    <span x-show="item.mounted" class="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-800">已挂载</span>
+                                </label>
+                            </template>
+                        </div>
+                    </div>
+                    <!-- 右：沙箱调试（参考 back.html） -->
+                    <div class="w-96 flex-shrink-0 bg-white rounded-xl border border-gray-200 flex flex-col overflow-hidden">
+                        <div class="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+                            <div class="flex items-center gap-2">
+                                <i data-lucide="message-square" class="w-4 h-4 text-slate-400" aria-hidden="true"></i>
+                                <span class="text-sm font-medium text-slate-700">沙箱调试</span>
+                            </div>
+                            <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-800">Agent 在线</span>
+                        </div>
+                        <div class="flex-1 overflow-y-auto p-4 space-y-3 overscroll-contain">
+                            <div class="flex gap-2.5">
+                                <div class="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5"><span class="text-xs text-blue-600 font-bold">A</span></div>
+                                <div class="bg-slate-50 rounded-lg px-3.5 py-2.5 text-sm text-slate-600">你好，可以帮你查询政策、撰写公文或分析数据，请问有什么需要？</div>
+                            </div>
+                            <div class="flex gap-2.5 justify-end">
+                                <div class="bg-blue-600 text-white rounded-lg px-3.5 py-2.5 text-sm max-w-[85%]">帮我查一下最新的公积金提取政策</div>
+                            </div>
+                            <div class="flex gap-2.5">
+                                <div class="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5"><span class="text-xs text-blue-600 font-bold">A</span></div>
+                                <div class="space-y-2">
+                                    <div class="bg-slate-50/70 border border-slate-100 rounded-lg px-3 py-2 text-xs text-slate-400"><span class="font-medium">Trace：</span>政策查询 → 数据库查询 · 1,240 tokens · 0.8s</div>
+                                    <div class="bg-slate-50 rounded-lg px-3.5 py-2.5 text-sm text-slate-600">根据住建部 2026 年最新规定，公积金提取政策主要变化包括：1. 租房提取额度上调…</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="px-4 pb-4 flex-shrink-0">
+                            <div class="flex items-center gap-2">
+                                <input type="text" placeholder="输入测试消息…" class="flex-1 text-sm px-3.5 py-2.5 bg-slate-50 border border-gray-200 rounded-lg" autocomplete="off" aria-label="沙箱调试输入">
+                                <button type="button" class="p-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700" aria-label="发送"><i data-lucide="send" class="w-3.5 h-3.5" aria-hidden="true"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- View: Skills（列表 + 详情双视图） -->
+        <div x-show="currentTab === 'skills'" class="flex-1 flex flex-col overflow-hidden bg-gray-50">
+            <!-- 技能列表 -->
+            <div x-show="skillView === 'list'" class="flex-1 overflow-y-auto">
+                <div class="max-w-6xl mx-auto px-6 py-6">
+                    <div class="flex justify-between items-center gap-4 mb-5">
+                        <h2 class="text-xl font-semibold text-slate-800">技能库</h2>
+                        <div class="flex items-center gap-2">
+                            <button type="button" class="px-4 py-2 rounded-lg text-sm font-medium text-slate-700 bg-white border border-gray-200 hover:bg-gray-50 flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2" aria-label="刷新技能列表">
+                                <i data-lucide="refresh-cw" class="w-4 h-4" aria-hidden="true"></i> 刷新
+                            </button>
+                            <div class="relative" @click.outside="showSkillDropdown = false">
+                                <button type="button" @click="showSkillDropdown = !showSkillDropdown" class="px-4 py-2 rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2" aria-label="添加技能" :aria-expanded="showSkillDropdown" aria-haspopup="menu">
+                                    <i data-lucide="plus" class="w-4 h-4" aria-hidden="true"></i> 添加
+                                    <i data-lucide="chevron-down" class="w-4 h-4 transition-transform" :class="showSkillDropdown ? 'rotate-180' : ''" aria-hidden="true"></i>
+                                </button>
+                                <div x-show="showSkillDropdown" x-cloak x-transition class="absolute right-0 top-full mt-2 z-20 w-72 bg-white border border-gray-200 rounded-xl shadow-xl p-2" role="menu" aria-label="技能创建方式">
+                                    <button type="button" role="menuitem" @click="currentTab = 'chat'; selectedHistoryId = null; hasMessages = false; chatInput = '使用@skill-creator创建一个技能，你可以先询问我需求是什么'; selectedHomeSkill = null; selectedHomeAgent = null; uploadedFile = null; showMentionPanel = false; showSkillDropdown = false;" class="w-full flex items-start gap-3 px-3 py-3 text-left rounded-lg hover:bg-slate-50 transition-colors">
+                                        <div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
+                                            <i data-lucide="sparkles" class="w-4 h-4" aria-hidden="true"></i>
+                                        </div>
+                                        <div class="min-w-0">
+                                            <div class="text-sm font-medium text-slate-800">使用对话创建</div>
+                                            <div class="text-xs text-slate-500 mt-0.5">通过对话描述需求完成技能构建</div>
+                                        </div>
+                                    </button>
+                                    <button type="button" role="menuitem" @click="showAddSkillModal = true; showSkillDropdown = false;" class="w-full flex items-start gap-3 px-3 py-3 text-left rounded-lg hover:bg-slate-50 transition-colors">
+                                        <div class="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center flex-shrink-0">
+                                            <i data-lucide="upload" class="w-4 h-4" aria-hidden="true"></i>
+                                        </div>
+                                        <div class="min-w-0">
+                                            <div class="text-sm font-medium text-slate-800">上传技能</div>
+                                            <div class="text-xs text-slate-500 mt-0.5">上传技能 ZIP 文件夹</div>
+                                        </div>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-sm text-slate-500 mb-3">内置与个人技能</p>
+                    <div class="flex items-center gap-3 mb-4">
+                        <template x-for="opt in [{v:'all',l:'全部'},{v:'内置',l:'内置'},{v:'个人',l:'个人'}]" :key="opt.v">
+                            <button type="button" @click="skillSourceFilter = opt.v" class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors" :class="skillSourceFilter === opt.v ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-slate-600 hover:bg-gray-50'" x-text="opt.l"></button>
+                        </template>
+                        <label for="skill-search" class="sr-only">搜索技能</label>
+                        <input id="skill-search" type="search" placeholder="搜索技能…" aria-label="搜索技能" class="ml-auto w-48 px-3 py-1.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    </div>
+                    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">技能名称</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">来源</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">被哪些 Agent 使用</th>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">启用</th>
+                                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                <template x-for="s in skillList.filter(s => skillSourceFilter === 'all' || s.source === skillSourceFilter)" :key="s.id">
+                                    <tr>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <div class="flex items-center">
+                                                <div class="flex-shrink-0 h-8 w-8 bg-blue-100 rounded flex items-center justify-center text-blue-600"><i data-lucide="file-text" class="w-4 h-4"></i></div>
+                                                <div class="ml-4">
+                                                    <div class="text-sm font-medium text-slate-800" x-text="s.name"></div>
+                                                    <div class="text-xs text-slate-500" x-text="s.desc"></div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap"><span class="px-2 py-0.5 rounded text-xs" :class="s.source === '内置' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'" x-text="s.source"></span></td>
+                                        <td class="px-6 py-4 text-sm text-slate-500" x-text="s.agents"></td>
+                                        <td class="px-6 py-4 whitespace-nowrap">
+                                            <span x-show="s.enabled" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">已启用</span>
+                                            <span x-show="!s.enabled" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-600">已禁用</span>
+                                            <button type="button" role="switch" :aria-checked="s.enabled" @click="s.enabled = !s.enabled" class="ml-2 relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:ring-2 focus:ring-blue-500 focus:ring-offset-2" :class="s.enabled ? 'bg-blue-600' : 'bg-gray-200'">
+                                                <span class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition-transform" :class="s.enabled ? 'translate-x-5' : 'translate-x-1'"></span>
+                                            </button>
+                                        </td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                            <template x-if="s.source === '内置'">
+                                                <button type="button" @click="skillDetailName = s.name; skillDetailIsBuiltin = true; skillView = 'detail'" class="text-blue-600 hover:text-blue-900 focus-visible:ring-2 focus-visible:ring-blue-500 rounded">查看</button>
+                                            </template>
+                                            <template x-if="s.source === '个人'">
+                                                <button type="button" @click="skillDetailName = s.name; skillDetailIsBuiltin = false; skillView = 'detail'" class="text-blue-600 hover:text-blue-900 focus-visible:ring-2 focus-visible:ring-blue-500 rounded">编辑</button>
+                                            </template>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <!-- 技能详情（编辑） -->
+            <div x-show="skillView === 'detail'" class="flex-1 flex flex-col min-h-0 overflow-hidden">
+                <header class="flex-shrink-0 flex items-center justify-between px-6 py-4 bg-white border-b border-gray-200">
+                    <div class="flex items-center gap-3">
+                        <button type="button" @click="skillView = 'list'" class="p-1.5 rounded-lg hover:bg-gray-100 text-slate-400" aria-label="返回列表"><i data-lucide="arrow-left" class="w-5 h-5" aria-hidden="true"></i></button>
+                        <div>
+                            <h1 class="text-lg font-semibold text-slate-800" x-text="skillDetailName"></h1>
+                            <div class="flex items-center gap-2 mt-0.5">
+                                <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-800">已发布</span>
+                                <span x-show="skillDetailIsBuiltin" class="px-2 py-0.5 text-xs font-medium rounded-full bg-slate-100 text-slate-600">仅预览</span>
+                                <span class="text-xs text-slate-400">依赖 3 个 Tool</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button type="button" class="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-slate-600 hover:bg-gray-50">依赖检查</button>
+                        <template x-if="!skillDetailIsBuiltin">
+                            <div class="flex items-center gap-2">
+                                <button type="button" class="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-slate-600 hover:bg-gray-50">保存</button>
+                                <button type="button" class="px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700">发布</button>
+                            </div>
+                        </template>
+                    </div>
+                </header>
+                <div class="flex-1 flex gap-3 min-h-0 p-4 overflow-hidden">
+                    <div class="w-52 flex-shrink-0 bg-white rounded-xl border border-gray-200 flex flex-col overflow-hidden">
+                        <div class="px-3 py-2.5 border-b border-gray-100 text-xs font-medium text-slate-500 uppercase tracking-wider">Files</div>
+                        <div class="flex-1 overflow-y-auto py-1.5 px-1.5 text-xs">
+                            <div class="flex items-center gap-1.5 px-2 py-1.5 rounded-md cursor-pointer hover:bg-slate-50" @click="skillTreeOpen.root = !skillTreeOpen.root">
+                                <i :data-lucide="skillTreeOpen.root ? 'chevron-down' : 'chevron-right'" class="w-3 h-3 text-slate-400 flex-shrink-0" aria-hidden="true"></i>
+                                <i data-lucide="folder" class="w-3.5 h-3.5 text-amber-500 flex-shrink-0" aria-hidden="true"></i>
+                                <span class="text-slate-700 font-medium truncate" x-text="skillDetailName"></span>
+                            </div>
+                            <div x-show="skillTreeOpen.root" class="ml-3 border-l border-gray-100">
+                                <div class="flex items-center gap-1.5 px-2 py-1.5 ml-1 rounded-md cursor-pointer hover:bg-slate-50" @click="skillTreeOpen.references = !skillTreeOpen.references">
+                                    <i :data-lucide="skillTreeOpen.references ? 'chevron-down' : 'chevron-right'" class="w-3 h-3 text-slate-400 flex-shrink-0" aria-hidden="true"></i>
+                                    <span class="text-slate-600 truncate">references</span>
+                                </div>
+                                <div x-show="skillTreeOpen.references" class="ml-4 border-l border-gray-100">
+                                    <button type="button" @click="skillActiveFile = 'format-rules.md'" class="w-full flex items-center gap-1.5 px-2 py-1.5 ml-1 rounded-md text-left hover:bg-slate-50" :class="skillActiveFile === 'format-rules.md' && 'bg-blue-50'"><span class="truncate text-slate-600" :class="skillActiveFile === 'format-rules.md' && 'text-blue-600 font-medium'">format-rules.md</span></button>
+                                    <button type="button" @click="skillActiveFile = 'prompt-patterns.md'" class="w-full flex items-center gap-1.5 px-2 py-1.5 ml-1 rounded-md text-left hover:bg-slate-50" :class="skillActiveFile === 'prompt-patterns.md' && 'bg-blue-50'"><span class="truncate text-slate-600" :class="skillActiveFile === 'prompt-patterns.md' && 'text-blue-600 font-medium'">prompt-patterns.md</span></button>
+                                </div>
+                                <button type="button" @click="skillActiveFile = 'SKILL.md'" class="w-full flex items-center gap-1.5 px-2 py-1.5 ml-1 rounded-md text-left hover:bg-slate-50" :class="skillActiveFile === 'SKILL.md' && 'bg-blue-50'"><span class="truncate" :class="skillActiveFile === 'SKILL.md' ? 'text-blue-600 font-medium' : 'text-slate-600'">SKILL.md</span></button>
+                                <button type="button" @click="skillActiveFile = 'schema.json'" class="w-full flex items-center gap-1.5 px-2 py-1.5 ml-1 rounded-md text-left hover:bg-slate-50" :class="skillActiveFile === 'schema.json' && 'bg-blue-50'"><span class="truncate" :class="skillActiveFile === 'schema.json' ? 'text-blue-600 font-medium' : 'text-slate-600'">schema.json</span></button>
+                                <button type="button" @click="skillActiveFile = 'handler.py'" class="w-full flex items-center gap-1.5 px-2 py-1.5 ml-1 rounded-md text-left hover:bg-slate-50" :class="skillActiveFile === 'handler.py' && 'bg-blue-50'"><span class="truncate" :class="skillActiveFile === 'handler.py' ? 'text-blue-600 font-medium' : 'text-slate-600'">handler.py</span></button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex-1 flex flex-col bg-white rounded-xl border border-gray-200 min-w-0 overflow-hidden">
+                        <div class="px-4 py-2.5 border-b border-gray-100 text-xs font-medium text-slate-600 flex-shrink-0" x-text="skillActiveFile"></div>
+                        <div class="flex-1 overflow-y-auto p-4">
+                            <pre x-show="skillActiveFile === 'SKILL.md'" class="text-sm text-slate-700 font-mono whitespace-pre-wrap m-0">---
+name: 公文润色
+description: 自动优化公文格式与表达，确保符合政务公文规范
+version: v2
+tools: [text_analyze, doc_format, grammar_check]
+---</pre>
+                            <pre x-show="skillActiveFile === 'schema.json'" class="text-sm text-slate-700 font-mono whitespace-pre-wrap m-0">{"name":"公文润色","input":{"type":"object","properties":{"content":{"type":"string"}}}}</pre>
+                            <pre x-show="skillActiveFile === 'handler.py'" class="text-sm text-slate-700 font-mono whitespace-pre-wrap m-0">async def handle(input, context):\n    return await context.call_tool("doc_format", input)</pre>
+                            <pre x-show="skillActiveFile === 'format-rules.md'" class="text-sm text-slate-700 font-mono whitespace-pre-wrap m-0"># 公文格式规范\n## 标题规范\n一级标题：方正小标宋简体 2 号</pre>
+                            <pre x-show="skillActiveFile === 'prompt-patterns.md'" class="text-sm text-slate-700 font-mono whitespace-pre-wrap m-0"># 提示词模板\n## 润色模板</pre>
+                        </div>
+                    </div>
+                    <!-- 技能详情：沙箱测试 -->
+                    <div class="w-96 flex-shrink-0 bg-white rounded-xl border border-gray-200 flex flex-col overflow-hidden">
+                        <div class="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+                            <div class="flex items-center gap-2">
+                                <i data-lucide="message-square" class="w-4 h-4 text-slate-400" aria-hidden="true"></i>
+                                <span class="text-sm font-medium text-slate-700">沙箱测试</span>
+                            </div>
+                            <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-800">Skill 在线</span>
+                        </div>
+                        <div class="flex-1 overflow-y-auto p-4 space-y-3 overscroll-contain">
+                            <div class="flex gap-2.5">
+                                <div class="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                    <i data-lucide="zap" class="w-3 h-3 text-slate-500" aria-hidden="true"></i>
+                                </div>
+                                <div class="bg-slate-50 rounded-lg px-3.5 py-2.5 text-sm text-slate-600">请输入测试内容，我将按当前技能执行。</div>
+                            </div>
+                            <div class="flex gap-2.5 justify-end">
+                                <div class="bg-blue-600 text-white rounded-lg px-3.5 py-2.5 text-sm max-w-[85%]">示例输入：请帮我润色这段公文…</div>
+                            </div>
+                            <div class="flex gap-2.5">
+                                <div class="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                    <i data-lucide="zap" class="w-3 h-3 text-slate-500" aria-hidden="true"></i>
+                                </div>
+                                <div class="space-y-2">
+                                    <div class="bg-slate-50/70 border border-slate-100 rounded-lg px-3 py-2 text-xs text-slate-400">
+                                        <span class="font-medium">Trace：</span>text_analyze → doc_format → grammar_check · 1,860 tokens · 1.2s
+                                    </div>
+                                    <div class="bg-slate-50 rounded-lg px-3.5 py-2.5 text-sm text-slate-600">执行完成，共 5 处修改。</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="px-4 pb-4 flex-shrink-0">
+                            <div class="flex items-center gap-2">
+                                <input type="text" placeholder="输入测试内容…" class="flex-1 text-sm px-3.5 py-2.5 bg-slate-50 border border-gray-200 rounded-lg" autocomplete="off" aria-label="Skill 沙箱测试输入">
+                                <button type="button" class="p-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700" aria-label="发送">
+                                    <i data-lucide="send" class="w-3.5 h-3.5" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- View: 工具（内置 Tools + 个人 MCP，与能力说明 UC-TOOL 一致） -->
+        <div x-show="currentTab === 'tools'" class="flex-1 overflow-y-auto bg-gray-50">
+            <div class="max-w-6xl mx-auto px-6 py-6">
+                <div class="flex justify-between items-center gap-4 mb-5">
+                    <div>
+                        <h2 class="text-xl font-semibold text-slate-800">工具</h2>
+                        <p class="text-sm text-slate-500 mt-1">内置工具与个人 MCP 工具，可查看被哪些 Skill/Agent 关联</p>
+                    </div>
+                    <button type="button" @click="showMcpModal = true" class="px-4 py-2 rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                        <i data-lucide="plus" class="w-4 h-4" aria-hidden="true"></i> 注册 MCP 工具
+                    </button>
+                </div>
+                <div class="mb-4">
+                    <label for="tool-search" class="sr-only">搜索工具</label>
+                    <input id="tool-search" type="search" placeholder="搜索工具…" aria-label="搜索工具"
+                           class="w-full max-w-md px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+                <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-6">
+                    <h3 class="px-6 py-3 text-sm font-medium text-slate-700 bg-gray-50 border-b border-gray-200">内置工具</h3>
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50"><tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">工具名称</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">描述</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">被关联 (Skill / Agent)</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">状态</th>
+                            <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">操作</th>
+                        </tr></thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            <template x-for="t in builtinToolsList" :key="t.id">
+                                <tr>
+                                    <td class="px-6 py-4 text-sm font-mono text-slate-800" x-text="t.name"></td>
+                                    <td class="px-6 py-4 text-sm text-slate-500" x-text="t.desc"></td>
+                                    <td class="px-6 py-4 text-sm text-slate-500" x-text="t.linked"></td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span x-show="t.enabled" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">已启用</span>
+                                        <span x-show="!t.enabled" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-600">已禁用</span>
+                                        <button type="button" role="switch" :aria-checked="t.enabled" :aria-label="t.enabled ? '禁用' : '启用'" @click="t.enabled = !t.enabled" class="ml-2 relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:ring-2 focus:ring-blue-500 focus:ring-offset-2" :class="t.enabled ? 'bg-blue-600' : 'bg-gray-200'">
+                                            <span class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition-transform" :class="t.enabled ? 'translate-x-5' : 'translate-x-1'"></span>
+                                        </button>
+                                    </td>
+                                    <td class="px-6 py-4 text-right"><button type="button" class="text-blue-600 text-sm font-medium hover:underline focus-visible:ring-2 focus-visible:ring-blue-500 rounded">查看</button></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                    <h3 class="px-6 py-3 text-sm font-medium text-slate-700 bg-gray-50 border-b border-gray-200">个人 MCP 工具</h3>
+                    <div class="px-6 py-8 text-center text-sm text-slate-500">暂无个人 MCP 工具，点击「注册 MCP 工具」添加。</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- View: 远程调度（飞书/钉钉/企微、Agent 集成到第三方） -->
+        <div x-show="currentTab === 'integrations'" class="flex-1 overflow-y-auto bg-gray-50">
+            <div class="max-w-6xl mx-auto px-6 py-6">
+                <h2 class="text-xl font-semibold text-slate-800 mb-5">远程调度</h2>
+                <p class="text-sm text-slate-500 mb-6">配置飞书、钉钉、企微等集成，或将 Agent 集成到第三方后，可以远程调度 Agent 办公。</p>
+                <div class="space-y-5">
+                    <h3 class="text-sm font-semibold text-slate-700">办公协作</h3>
+                    <div class="grid gap-4 md:grid-cols-3">
+                        <button type="button" @click="integrationConfigModal = 'feishu'" class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm text-left hover:border-blue-200 transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                            <div class="flex items-center gap-3 mb-2">
+                                <div class="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600"><i data-lucide="message-circle" class="w-5 h-5" aria-hidden="true"></i></div>
+                                <span class="text-base font-semibold text-slate-800">飞书</span>
+                            </div>
+                            <p class="text-xs text-slate-500" x-text="integrationStatus.feishu ? '已启用' : '未配置'"></p>
+                        </button>
+                        <button type="button" @click="integrationConfigModal = 'dingtalk'" class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm text-left hover:border-blue-200 transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                            <div class="flex items-center gap-3 mb-2">
+                                <div class="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600"><i data-lucide="message-circle" class="w-5 h-5" aria-hidden="true"></i></div>
+                                <span class="text-base font-semibold text-slate-800">钉钉</span>
+                            </div>
+                            <p class="text-xs text-slate-500" x-text="integrationStatus.dingtalk ? '已启用' : '未配置'"></p>
+                        </button>
+                        <button type="button" @click="integrationConfigModal = 'wecom'" class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm text-left hover:border-blue-200 transition-colors focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                            <div class="flex items-center gap-3 mb-2">
+                                <div class="w-10 h-10 rounded-lg bg-green-50 flex items-center justify-center text-green-600"><i data-lucide="message-circle" class="w-5 h-5" aria-hidden="true"></i></div>
+                                <span class="text-base font-semibold text-slate-800">企业微信</span>
+                            </div>
+                            <p class="text-xs text-slate-500" x-text="integrationStatus.wecom ? '已启用' : '未配置'"></p>
+                        </button>
+                    </div>
+                    <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                        <h3 class="text-base font-semibold text-slate-800 mb-2">Agent 集成到第三方</h3>
+                        <p class="text-sm text-slate-500 mb-4">通过 API Key 等方式将 Agent 对接到外部系统</p>
+                        <div class="text-sm text-slate-600 mb-4">选择 Agent、生成 API Key、配置回调与权限。</div>
+                        <button type="button" class="text-blue-600 text-sm font-medium hover:underline focus-visible:ring-2 focus-visible:ring-blue-500 rounded">管理 API Key</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- View: 定时任务（独立页，无 Tab 切换） -->
+        <div x-show="currentTab === 'tasks'" class="flex-1 overflow-y-auto bg-gray-50">
+            <div class="max-w-6xl mx-auto px-6 py-6">
+                <div class="flex justify-between items-center gap-4 mb-5">
+                    <div>
+                        <h2 class="text-xl font-semibold text-slate-800">定时任务</h2>
+                        <p class="text-sm text-slate-500 mt-1">管理周期性自动执行的 AI 任务</p>
+                    </div>
+                    <button type="button" @click="showCreateTaskModal = true" class="px-4 py-2 rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 flex items-center gap-2 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                        <i data-lucide="plus" class="w-4 h-4" aria-hidden="true"></i> 添加定时任务
+                    </button>
+                </div>
+                <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">任务名称</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">启用状态</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">任务描述</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">执行时间</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">执行会话</th>
+                                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">执行状态</th>
+                                <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            <template x-for="task in timedTasks" :key="task.name">
+                                <tr class="cursor-pointer hover:bg-slate-50/50" @click="showTaskToast(task.name)">
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-800" x-text="task.name"></td>
+                                    <td class="px-6 py-4 whitespace-nowrap" @click.stop>
+                                        <button type="button" role="switch" :aria-checked="task.enabled" @click="task.enabled = !task.enabled" class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:ring-2 focus:ring-blue-500 focus:ring-offset-2" :class="task.enabled ? 'bg-blue-600' : 'bg-gray-200'" aria-label="启用"><span class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transition-transform" :class="task.enabled ? 'translate-x-5' : 'translate-x-1'"></span></button>
+                                    </td>
+                                    <td class="px-6 py-4 text-sm text-slate-500 max-w-xs" x-text="task.desc"></td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500" x-text="task.schedule"></td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-500" x-text="task.session || '未指定'"></td>
+                                    <td class="px-6 py-4 whitespace-nowrap"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full" :class="task.status === '成功' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'" x-text="task.status"></span></td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2" @click.stop>
+                                        <button type="button" class="text-blue-600 hover:underline">编辑</button>
+                                        <button type="button" class="text-slate-500 hover:text-red-600">删除</button>
+                                        <button type="button" @click="selectedTaskExecLogName = task.name; showTaskExecLogModal = true" class="text-slate-500 hover:text-blue-600">执行日志</button>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- View: 个人设置（默认模型、Token、公共 Skill/Agent、长期记忆、账号与安全，与能力说明 UC-SETTINGS 一致） -->
+        <div x-show="currentTab === 'settings'" class="flex-1 overflow-y-auto bg-gray-50">
+            <div class="max-w-3xl mx-auto px-6 py-6">
+                <h2 class="text-xl font-semibold text-slate-800 mb-6">个人设置</h2>
+                <div class="space-y-6">
+                    <section class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                        <h3 class="text-base font-semibold text-slate-800 mb-3">默认模型</h3>
+                        <p class="text-sm text-slate-500 mb-3">选择对话与任务使用的默认大模型</p>
+                        <select class="w-full max-w-xs px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" aria-label="默认模型">
+                            <option>讯飞星火 4.0</option>
+                            <option>讯飞星火 3.5</option>
+                        </select>
+                    </section>
+                    <section class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                        <h3 class="text-base font-semibold text-slate-800 mb-3">工作区文件路径</h3>
+                        <p class="text-sm text-slate-500 mb-3">Agent、Skill 等资源的工作目录，默认为客户端安装路径下的 workspace 文件夹。</p>
+                        <div class="flex gap-2">
+                            <input type="text" x-model="workspacePath" class="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="例如：C:\Program Files\讯飞AIOS\workspace" aria-label="工作区路径">
+                            <button type="button" class="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-slate-600 hover:bg-slate-50 flex-shrink-0">选择文件夹</button>
+                        </div>
+                    </section>
+                    <section class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                        <h3 class="text-base font-semibold text-slate-800 mb-3">Token 用量</h3>
+                        <p class="text-sm text-slate-500 mb-4">查看本日、本月及累计 Token 消耗与时间趋势</p>
+                        <div class="grid grid-cols-3 gap-4 mb-4">
+                            <div class="rounded-lg border border-gray-200 p-4 bg-gray-50/50">
+                                <div class="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">本日</div>
+                                <div class="text-lg font-semibold text-slate-800 tabular-nums">1.2万</div>
+                            </div>
+                            <div class="rounded-lg border border-gray-200 p-4 bg-gray-50/50">
+                                <div class="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">本月</div>
+                                <div class="text-lg font-semibold text-slate-800 tabular-nums">12.5万 <span class="text-sm font-normal text-slate-500">/ 100万</span></div>
+                            </div>
+                            <div class="rounded-lg border border-gray-200 p-4 bg-gray-50/50">
+                                <div class="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">累计</div>
+                                <div class="text-lg font-semibold text-slate-800 tabular-nums">89万</div>
+                            </div>
+                        </div>
+                        <div class="mt-4">
+                            <h4 class="text-sm font-medium text-slate-700 mb-3">用量趋势（近 7 日，示例数据）</h4>
+                            <div class="flex items-end gap-1 h-32 py-2" aria-hidden="true">
+                                <div class="flex-1 flex flex-col items-center gap-1">
+                                    <div class="w-full bg-blue-200 rounded-t min-h-[2px]" style="height: 45%"></div>
+                                    <span class="text-xs text-slate-500">3/1</span>
+                                </div>
+                                <div class="flex-1 flex flex-col items-center gap-1">
+                                    <div class="w-full bg-blue-300 rounded-t min-h-[2px]" style="height: 62%"></div>
+                                    <span class="text-xs text-slate-500">3/2</span>
+                                </div>
+                                <div class="flex-1 flex flex-col items-center gap-1">
+                                    <div class="w-full bg-blue-400 rounded-t min-h-[2px]" style="height: 55%"></div>
+                                    <span class="text-xs text-slate-500">3/3</span>
+                                </div>
+                                <div class="flex-1 flex flex-col items-center gap-1">
+                                    <div class="w-full bg-blue-500 rounded-t min-h-[2px]" style="height: 80%"></div>
+                                    <span class="text-xs text-slate-500">3/4</span>
+                                </div>
+                                <div class="flex-1 flex flex-col items-center gap-1">
+                                    <div class="w-full bg-blue-400 rounded-t min-h-[2px]" style="height: 70%"></div>
+                                    <span class="text-xs text-slate-500">3/5</span>
+                                </div>
+                                <div class="flex-1 flex flex-col items-center gap-1">
+                                    <div class="w-full bg-blue-300 rounded-t min-h-[2px]" style="height: 38%"></div>
+                                    <span class="text-xs text-slate-500">3/6</span>
+                                </div>
+                                <div class="flex-1 flex flex-col items-center gap-1">
+                                    <div class="w-full bg-blue-600 rounded-t min-h-[2px]" style="height: 100%"></div>
+                                    <span class="text-xs text-slate-500">今日</span>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                    <section class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                        <h3 class="text-base font-semibold text-slate-800 mb-3">账号与安全</h3>
+                        <p class="text-sm text-slate-500 mb-3">修改密码、绑定手机/邮箱、登录记录等</p>
+                        <button type="button" class="text-blue-600 text-sm font-medium hover:underline focus-visible:ring-2 focus-visible:ring-blue-500 rounded">前往账号与安全</button>
+                    </section>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- 添加技能弹窗（上传 Skill ZIP，参考 back 上传） -->
+    <div x-show="showAddSkillModal" x-cloak class="fixed inset-0 z-30 flex items-center justify-center p-4 bg-black/50" @click="showAddSkillModal = false" role="dialog" aria-modal="true" aria-labelledby="modal-add-skill-title">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto overscroll-contain" @click.stop>
+            <div class="px-6 py-5 border-b border-gray-100 flex justify-between items-center">
+                <h3 id="modal-add-skill-title" class="text-base font-semibold text-slate-800">上传技能</h3>
+                <button type="button" @click="showAddSkillModal = false" aria-label="关闭" class="p-1 rounded-lg hover:bg-slate-100 text-slate-400"><i data-lucide="x" class="w-5 h-5" aria-hidden="true"></i></button>
+            </div>
+            <div class="px-6 py-5 space-y-4">
+                <div class="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center hover:border-blue-300 transition-colors cursor-pointer">
+                    <div class="w-10 h-10 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-3">
+                        <i data-lucide="upload-cloud" class="w-5 h-5 text-slate-400" aria-hidden="true"></i>
+                    </div>
+                    <div class="text-sm font-medium text-slate-700">点击上传文件</div>
+                </div>
+                <div class="space-y-3">
+                    <div class="text-sm font-medium text-slate-700">文件要求</div>
+                    <ul class="pl-4 text-sm text-slate-500 space-y-2 list-disc">
+                        <li>根目录下包含 `SKILL.md` 文件的 `.zip` 或 `.skill` 文件</li>
+                        <li>`SKILL.md` 包含以 YAML 格式编写的技能名称和描述</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-2">
+                <button type="button" @click="showAddSkillModal = false" class="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-slate-600 hover:bg-slate-50">取消</button>
+                <button type="button" class="px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700">上传
+
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 注册外部 MCP Server 弹窗（参考 back.html） -->
+    <div x-show="showMcpModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" @keydown.escape.window="showMcpModal = false; mcpTestStatus = 'idle'; mcpToolsPreview = []" role="dialog" aria-modal="true" aria-labelledby="modal-mcp-title">
+        <div class="absolute inset-0" @click="showMcpModal = false; mcpTestStatus = 'idle'; mcpToolsPreview = []"></div>
+        <div class="relative bg-white rounded-2xl shadow-xl w-[560px] max-w-[95vw] max-h-[90vh] overflow-y-auto overscroll-contain" @click.stop>
+            <div class="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+                <h2 id="modal-mcp-title" class="text-base font-semibold text-slate-800">注册外部 MCP Server</h2>
+                <button type="button" @click="showMcpModal = false; mcpTestStatus = 'idle'; mcpToolsPreview = []" class="p-1 rounded-lg hover:bg-slate-100 text-slate-400" aria-label="关闭"><i data-lucide="x" class="w-4.5 h-4.5" aria-hidden="true"></i></button>
+            </div>
+            <div class="px-6 py-5 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1.5" for="mcp-name">Server 名称</label>
+                    <input x-model="mcpForm.name" id="mcp-name" type="text" placeholder="例：政务数据中台" class="w-full text-sm px-3 py-2.5 border border-gray-200 rounded-lg" autocomplete="off">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1.5" for="mcp-endpoint">Endpoint URL</label>
+                    <select x-model="mcpForm.protocol" class="text-sm px-3 py-2.5 border border-gray-200 rounded-lg mr-2 w-28">
+                        <option value="mcp">mcp://</option>
+                        <option value="http">http://</option>
+                        <option value="https">https://</option>
+                    </select>
+                    <input x-model="mcpForm.host" id="mcp-endpoint" type="text" placeholder="192.168.1.100:8080 或 api.example.com/mcp" class="text-sm px-3 py-2.5 border border-gray-200 rounded-lg flex-1 inline-block" style="width: calc(100% - 120px);" autocomplete="off">
+                    <p class="text-xs text-slate-400 mt-1.5">支持 mcp://（标准）、http://、https://（TLS加密）</p>
+                </div>
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input x-model="mcpForm.needAuth" type="checkbox" class="w-4 h-4 rounded border-gray-300 text-blue-600">
+                        <span class="text-sm font-medium text-slate-700">需要认证</span>
+                        <span class="text-xs text-slate-400">（内部可信网络可关闭）</span>
+                    </label>
+                    <div x-show="mcpForm.needAuth" class="mt-3 space-y-3">
+                        <select x-model="mcpForm.authType" class="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg">
+                            <option value="apiKey">API Key</option>
+                            <option value="oauth">OAuth 2.0</option>
+                            <option value="mtls">mTLS（双向证书）</option>
+                        </select>
+                        <div x-show="mcpForm.authType === 'apiKey'">
+                            <input x-model="mcpForm.authToken" type="password" placeholder="输入 API Key" class="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg">
+                        </div>
+                        <div x-show="mcpForm.authType === 'oauth'" class="space-y-2">
+                            <input x-model="mcpForm.oauthClientId" type="text" placeholder="Client ID" class="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg">
+                            <input x-model="mcpForm.oauthClientSecret" type="password" placeholder="Client Secret" class="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg">
+                        </div>
+                        <div x-show="mcpForm.authType === 'mtls'">
+                            <textarea x-model="mcpForm.mtlsCert" rows="2" placeholder="粘贴证书内容（PEM格式）" class="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg resize-none"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1.5" for="mcp-desc">描述（可选）</label>
+                    <textarea x-model="mcpForm.desc" id="mcp-desc" rows="2" placeholder="简要说明该 MCP Server 提供的能力…" class="w-full text-sm px-3 py-2.5 border border-gray-200 rounded-lg resize-none"></textarea>
+                </div>
+                <div x-show="mcpTestStatus !== 'idle'" class="border rounded-lg p-4" :class="mcpTestStatus === 'success' ? 'border-green-200 bg-green-50' : mcpTestStatus === 'error' ? 'border-red-200 bg-red-50' : 'border-blue-200 bg-blue-50'">
+                    <div class="flex items-center gap-2 mb-2">
+                        <i x-show="mcpTestStatus === 'testing'" data-lucide="loader-2" class="w-4 h-4 text-blue-500 animate-spin" aria-hidden="true"></i>
+                        <i x-show="mcpTestStatus === 'success'" data-lucide="check-circle" class="w-4 h-4 text-green-500" aria-hidden="true"></i>
+                        <i x-show="mcpTestStatus === 'error'" data-lucide="x-circle" class="w-4 h-4 text-red-500" aria-hidden="true"></i>
+                        <span class="text-sm font-medium" :class="mcpTestStatus === 'success' ? 'text-green-700' : mcpTestStatus === 'error' ? 'text-red-700' : 'text-blue-700'" x-text="mcpTestStatus === 'testing' ? '正在测试连接...' : mcpTestStatus === 'success' ? '连接成功' : '连接失败'"></span>
+                    </div>
+                    <p x-show="mcpTestStatus === 'error'" class="text-xs text-red-600" x-text="mcpTestError"></p>
+                    <div x-show="mcpTestStatus === 'success' && mcpToolsPreview.length > 0" class="mt-3 pt-3 border-t border-green-200">
+                        <div class="text-sm font-medium text-green-700 mb-2">探测到 <span x-text="mcpToolsPreview.length"></span> 个 Tools：</div>
+                        <div class="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                            <template x-for="tool in mcpToolsPreview" :key="tool">
+                                <span class="px-2 py-1 bg-white rounded text-xs text-slate-600 border border-green-200" x-text="tool"></span>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+                <div x-show="mcpTestStatus === 'idle'" class="bg-slate-50 rounded-lg p-4 text-xs text-slate-500 space-y-1">
+                    <div class="font-medium text-slate-600 mb-1">注册流程：</div>
+                    <div class="flex items-center gap-2"><span class="w-5 h-5 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-medium">1</span>点击「测试连接」验证 Server 可达性</div>
+                    <div class="flex items-center gap-2"><span class="w-5 h-5 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-medium">2</span>预览探测到的 Tools 清单</div>
+                    <div class="flex items-center gap-2"><span class="w-5 h-5 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-medium">3</span>确认注册，完成 MCP Server 接入</div>
+                </div>
+            </div>
+            <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-2">
+                <button type="button" @click="showMcpModal = false; mcpTestStatus = 'idle'; mcpToolsPreview = []" class="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-slate-600 hover:bg-slate-50">取消</button>
+                <button type="button" x-show="mcpTestStatus !== 'success'" @click="testMcpConnection()" :disabled="mcpTestStatus === 'testing' || !mcpForm.name || !mcpForm.host" class="px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">测试连接</button>
+                <button type="button" x-show="mcpTestStatus === 'success'" @click="registerMcp()" class="px-4 py-2 text-sm font-medium rounded-lg bg-green-600 text-white hover:bg-green-700">确认注册</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加定时任务弹窗（参考图2：任务名称、任务描述、计划、会话选择） -->
+    <div x-show="showCreateTaskModal" x-cloak class="fixed inset-0 z-30 flex items-center justify-center p-4 bg-black/50" @click="showCreateTaskModal = false" role="dialog" aria-modal="true" aria-labelledby="modal-create-task-title">
+        <div class="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto overscroll-contain" @click.stop>
+            <div class="p-4 border-b border-gray-100 flex justify-between items-center">
+                <h3 id="modal-create-task-title" class="text-lg font-semibold text-slate-800">添加定时任务</h3>
+                <button type="button" @click="showCreateTaskModal = false" aria-label="关闭" class="p-2 text-slate-400 hover:text-slate-600 rounded"><i data-lucide="x" class="w-5 h-5" aria-hidden="true"></i></button>
+            </div>
+            <div class="p-4 space-y-4">
+                <div>
+                    <label for="task-title" class="block text-sm font-medium text-slate-700 mb-1">任务名称</label>
+                    <input id="task-title" type="text" placeholder="如：AI 新闻摘要" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+                <div>
+                    <label for="task-prompt" class="block text-sm font-medium text-slate-700 mb-1">任务描述（提示词）</label>
+                    <textarea id="task-prompt" rows="3" placeholder="如：搜索昨天最具影响力的 AI 新闻，并向我发送一份简要摘要。" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">计划（定时）</label>
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <select x-model="taskScheduleType" class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <option value="daily">每天</option>
+                            <option value="weekly">每周</option>
+                            <option value="monthly">每月</option>
+                            <option value="once">不重复</option>
+                        </select>
+                        <template x-if="taskScheduleType === 'weekly'">
+                            <select x-model="taskScheduleDay" class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                <option value="MON">一</option><option value="TUE">二</option><option value="WED">三</option><option value="THU">四</option><option value="FRI">五</option><option value="SAT">六</option><option value="SUN">日</option>
+                            </select>
+                        </template>
+                        <template x-if="taskScheduleType === 'monthly'">
+                            <select class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                <option>1 号</option><option>15 号</option><option>月末</option>
+                            </select>
+                        </template>
+                        <template x-if="taskScheduleType === 'once'">
+                            <input type="date" class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        </template>
+                        <input type="time" x-model="taskScheduleTime" class="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    </div>
+                </div>
+                <div>
+                    <label for="task-expiry" class="block text-sm font-medium text-slate-700 mb-1">到期日期（可选）</label>
+                    <input id="task-expiry" type="date" placeholder="选择到期日期" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+                <div>
+                    <label for="task-session" class="block text-sm font-medium text-slate-700 mb-1">会话选择（可选）</label>
+                    <p class="text-xs text-slate-500 mb-1">不指定会话则直接执行，可通过执行日志查看结果；指定固定会话可避免多会话错乱</p>
+                    <select id="task-session" x-model="taskSessionId" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <option value="">不指定</option>
+                        <option value="session-1">项目推进会纪要</option>
+                        <option value="session-2">本周招投标信息采集</option>
+                        <option value="session-3">公积金政策查询</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">高级设置（可选）</label>
+                    <select class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <option>IFLY AIOS · 始终询问</option>
+                        <option>IFLY AIOS · 使用默认</option>
+                    </select>
+                </div>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" @click="showCreateTaskModal = false" class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-gray-50">取消</button>
+                    <button type="button" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 定时任务执行日志弹窗 -->
+    <div x-show="showTaskExecLogModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" @keydown.escape.window="showTaskExecLogModal = false" role="dialog" aria-modal="true" :aria-labelledby="'modal-exec-log-title'">
+        <div class="absolute inset-0" @click="showTaskExecLogModal = false"></div>
+        <div class="relative bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col" @click.stop>
+            <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
+                <h3 id="modal-exec-log-title" class="text-base font-semibold text-slate-800">执行日志 · <span x-text="selectedTaskExecLogName"></span></h3>
+                <button type="button" @click="showTaskExecLogModal = false" class="p-1.5 rounded-lg hover:bg-gray-100 text-slate-400" aria-label="关闭"><i data-lucide="x" class="w-4 h-4" aria-hidden="true"></i></button>
+            </div>
+            <div class="flex-1 overflow-y-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-gray-50 border-b border-gray-200 sticky top-0">
+                        <tr>
+                            <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">执行时间</th>
+                            <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">状态</th>
+                            <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">结果摘要</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        <template x-for="log in taskExecLogs" :key="log.time">
+                            <tr>
+                                <td class="px-5 py-3 text-slate-600 tabular-nums whitespace-nowrap" x-text="log.time"></td>
+                                <td class="px-5 py-3 whitespace-nowrap"><span class="px-2 py-0.5 text-xs font-medium rounded-full" :class="log.status === '成功' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'" x-text="log.status"></span></td>
+                                <td class="px-5 py-3 text-slate-600" x-text="log.summary"></td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 执行完成 Toast（演示） -->
+    <div x-show="showToast" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 translate-y-2" x-transition:enter-end="opacity-100 translate-y-0" x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] px-4 py-3 bg-slate-800 text-white text-sm font-medium rounded-lg shadow-lg" role="status" aria-live="polite" x-text="toastMessage"></div>
+
+    <!-- 创建长期计划弹窗 -->
+    <div x-show="showCreatePlanModal" x-cloak class="fixed inset-0 z-30 flex items-center justify-center p-4 bg-black/50" @click="showCreatePlanModal = false" role="dialog" aria-modal="true" aria-labelledby="modal-create-plan-title">
+        <div class="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto overscroll-contain" @click.stop>
+            <div class="p-4 border-b border-gray-100 flex justify-between items-center">
+                <h3 id="modal-create-plan-title" class="text-lg font-semibold text-slate-800">创建长期计划</h3>
+                <button type="button" @click="showCreatePlanModal = false" aria-label="关闭" class="p-2 text-slate-400 hover:text-slate-600 rounded"><i data-lucide="x" class="w-5 h-5" aria-hidden="true"></i></button>
+            </div>
+            <div class="p-4 space-y-4">
+                <div class="flex gap-3 p-3 bg-amber-50 rounded-lg border border-amber-100">
+                    <span class="text-2xl">🐻</span>
+                    <div>
+                        <h4 class="text-sm font-medium text-slate-800">准备好一起达成你的目标了吗？</h4>
+                        <p class="text-xs text-slate-600 mt-0.5">说出你的构思，剩下的规划、执行与复盘由我接手。这一次，让计划不止停留在计划。</p>
+                    </div>
+                </div>
+                <div>
+                    <textarea placeholder="可以直接输入想要执行的计划，也可以直接点击选择下方的模板" rows="3" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"></textarea>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <button type="button" class="p-3 border border-gray-200 rounded-lg text-left hover:border-blue-200 transition-colors">
+                        <span class="text-sm font-medium text-slate-800 block">产品季度迭代计划</span>
+                        <span class="text-xs text-slate-500 mt-0.5 block">目标拆解、里程碑设定、资源分配</span>
+                    </button>
+                    <button type="button" class="p-3 border border-gray-200 rounded-lg text-left hover:border-blue-200 transition-colors">
+                        <span class="text-sm font-medium text-slate-800 block">个人学习计划</span>
+                        <span class="text-xs text-slate-500 mt-0.5 block">年度技能提升与学习路线</span>
+                    </button>
+                </div>
+                <div class="flex justify-end pt-2">
+                    <button type="button" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">创建</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 重命名对话弹窗 -->
+    <div x-show="showRenameModal" x-cloak class="fixed inset-0 z-30 flex items-center justify-center p-4 bg-black/50" @click="showRenameModal = false" role="dialog" aria-modal="true" aria-labelledby="modal-rename-title">
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-4" @click.stop>
+            <div class="flex justify-between items-center mb-4">
+                <h3 id="modal-rename-title" class="text-lg font-semibold text-slate-800">重命名对话</h3>
+                <button type="button" @click="showRenameModal = false; conversationToRename = null" aria-label="关闭" class="p-2 text-slate-400 hover:text-slate-600 rounded"><i data-lucide="x" class="w-5 h-5" aria-hidden="true"></i></button>
+            </div>
+            <label for="rename-input" class="block text-sm font-medium text-slate-700 mb-2">对话标题</label>
+            <input id="rename-input" type="text" x-model="renameTitle" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="输入新标题">
+            <div class="flex justify-end gap-2 mt-4">
+                <button type="button" @click="showRenameModal = false; conversationToRename = null" class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-gray-50">取消</button>
+                <button type="button" @click="if (conversationToRename) { conversationToRename.title = renameTitle; } showRenameModal = false; conversationToRename = null" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 删除对话确认弹窗 -->
+    <div x-show="showDeleteModal" x-cloak class="fixed inset-0 z-30 flex items-center justify-center p-4 bg-black/50" @click="showDeleteModal = false" role="dialog" aria-modal="true" aria-labelledby="modal-delete-title">
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-4" @click.stop>
+            <div class="flex justify-between items-center mb-4">
+                <h3 id="modal-delete-title" class="text-lg font-semibold text-slate-800">删除对话</h3>
+                <button type="button" @click="showDeleteModal = false; conversationToDelete = null" aria-label="关闭" class="p-2 text-slate-400 hover:text-slate-600 rounded"><i data-lucide="x" class="w-5 h-5" aria-hidden="true"></i></button>
+            </div>
+            <p class="text-sm text-slate-600 mb-4">确定删除该对话？删除后不可恢复。</p>
+            <div class="flex justify-end gap-2">
+                <button type="button" @click="showDeleteModal = false; conversationToDelete = null" class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-gray-50">取消</button>
+                <button type="button" @click="const id = conversationToDelete?.id; if (conversationToDelete) { historyList = historyList.filter(c => c.id !== id); if (selectedHistoryId === id) selectedHistoryId = null; } showDeleteModal = false; conversationToDelete = null" class="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700">确定删除</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 办公协作配置弹窗（飞书/钉钉/企微） -->
+    <div x-show="integrationConfigModal" x-cloak class="fixed inset-0 z-30 flex items-center justify-center p-4 bg-black/50" @click="integrationConfigModal = null" role="dialog" aria-modal="true" :aria-labelledby="'modal-integration-' + integrationConfigModal">
+        <div class="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto overscroll-contain" @click.stop>
+            <div class="p-4 border-b border-gray-100 flex justify-between items-center">
+                <h3 :id="'modal-integration-' + integrationConfigModal" class="text-lg font-semibold text-slate-800" x-text="integrationConfigModal === 'feishu' ? '配置飞书' : (integrationConfigModal === 'dingtalk' ? '配置钉钉' : '配置企业微信')"></h3>
+                <button type="button" @click="integrationConfigModal = null" aria-label="关闭" class="p-2 text-slate-400 hover:text-slate-600 rounded"><i data-lucide="x" class="w-5 h-5" aria-hidden="true"></i></button>
+            </div>
+            <div class="p-4 space-y-4">
+                <a href="#" class="text-sm text-blue-600 hover:underline">查看开发文档</a>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">AppId <span class="text-red-500">*</span></label>
+                    <input type="text" placeholder="请输入 AppId" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">AppKey <span class="text-red-500">*</span></label>
+                    <input type="text" placeholder="请输入 AppKey" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">AppSecret <span class="text-red-500">*</span></label>
+                    <input type="password" placeholder="请输入 AppSecret" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">回调 URL <span class="text-red-500">*</span></label>
+                    <input type="url" placeholder="https://..." class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">权限</label>
+                    <div class="space-y-2">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"> <span class="text-sm text-slate-700">接收消息</span></label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"> <span class="text-sm text-slate-700">发送消息</span></label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"> <span class="text-sm text-slate-700">群管理</span></label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"> <span class="text-sm text-slate-700">通讯录</span></label>
+                    </div>
+                </div>
+            </div>
+            <div class="p-4 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2">
+                <button type="button" class="text-sm text-slate-500 hover:text-slate-700">测试连接</button>
+                <div class="flex gap-2">
+                    <button type="button" @click="integrationConfigModal = null" class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-gray-50">取消</button>
+                    <button type="button" @click="if (integrationConfigModal) { integrationStatus[integrationConfigModal] = true; integrationConfigModal = null; }" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 新建 Agent 弹窗（AI 辅助生成，参考 back.html） -->
+    <div x-show="showAgentCreateModal" x-cloak class="fixed inset-0 z-30 flex items-center justify-center p-4 bg-black/50" @keydown.escape.window="showAgentCreateModal = false; agentCreateStep = 'input'" @click="showAgentCreateModal = false; agentCreateStep = 'input'" role="dialog" aria-modal="true" aria-labelledby="modal-agent-create-title">
+        <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-[560px] max-h-[90vh] overflow-y-auto overscroll-contain" @click.stop>
+            <div class="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+                <h2 id="modal-agent-create-title" class="text-base font-semibold text-slate-800" x-text="agentCreateStep === 'input' ? '新建 Agent' : '正在生成 Agent 配置...'"></h2>
+                <button x-show="agentCreateStep === 'input'" type="button" @click="showAgentCreateModal = false; agentCreateStep = 'input'" class="p-1 rounded-lg hover:bg-slate-100 text-slate-400" aria-label="关闭"><i data-lucide="x" class="w-5 h-5" aria-hidden="true"></i></button>
+            </div>
+            <div x-show="agentCreateStep === 'input'" class="px-6 py-5 space-y-4">
+                <div class="bg-blue-50 rounded-lg p-4 text-sm text-blue-700">
+                    <div class="flex items-start gap-2">
+                        <i data-lucide="sparkles" class="w-4 h-4 mt-0.5 flex-shrink-0" aria-hidden="true"></i>
+                        <div>
+                            <p class="font-medium mb-1">AI 辅助创建</p>
+                            <p class="text-blue-600 text-xs">描述你对 Agent 的需求，AI 将自动生成角色定义、挂载的 Skill/Tools，你可以在编辑器中进一步调整。</p>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1.5">需求描述</label>
+                    <textarea x-model="agentCreateInput" rows="5" placeholder="例如：需要一个政务客服 Agent，能够回答市民关于公积金、社保、户口迁移的政策咨询，语气要亲切专业..." class="w-full text-sm px-3 py-2.5 border border-gray-200 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"></textarea>
+                    <p class="text-xs text-slate-400 mt-1.5">建议包含：应用场景、核心能力、语气风格、知识领域</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">参考模板（可选）</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button type="button" @click="agentCreateInput = '需要一个政务客服 Agent，能够回答市民关于公积金、社保、户口迁移的政策咨询，语气要亲切专业。'" class="text-left px-3 py-2 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors text-sm">
+                            <span class="font-medium text-slate-700 block">政务客服</span>
+                            <span class="text-xs text-slate-400 truncate block">政策咨询、公积金社保</span>
+                        </button>
+                        <button type="button" @click="agentCreateInput = '需要一个会议纪要助手，能根据录音或文字整理成结构化会议纪要，并提取待办与责任人。'" class="text-left px-3 py-2 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors text-sm">
+                            <span class="font-medium text-slate-700 block">会议纪要</span>
+                            <span class="text-xs text-slate-400 truncate block">整理纪要、提取待办</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div x-show="agentCreateStep === 'generating'" class="px-6 py-12 text-center">
+                <div class="w-12 h-12 mx-auto mb-4 rounded-full bg-blue-100 flex items-center justify-center">
+                    <i data-lucide="loader-2" class="w-6 h-6 text-blue-600 animate-spin" aria-hidden="true"></i>
+                </div>
+                <p class="text-sm text-slate-600 mb-2">AI 正在分析需求并生成配置...</p>
+                <p class="text-xs text-slate-400 mb-4" x-text="agentCreateProgress"></p>
+                <div class="mt-6 space-y-2 text-left max-w-sm mx-auto">
+                    <template x-for="(item, idx) in agentCreateTasks" :key="idx">
+                        <div class="flex items-center gap-2 text-xs" :class="item.done ? 'text-green-600' : (item.active ? 'text-blue-600' : 'text-slate-400')">
+                            <i x-show="item.done" data-lucide="check-circle" class="w-4 h-4" aria-hidden="true"></i>
+                            <i x-show="!item.done && item.active" data-lucide="loader-2" class="w-4 h-4 animate-spin" aria-hidden="true"></i>
+                            <i x-show="!item.done && !item.active" data-lucide="circle" class="w-4 h-4" aria-hidden="true"></i>
+                            <span x-text="item.name"></span>
+                        </div>
+                    </template>
+                </div>
+            </div>
+            <div x-show="agentCreateStep === 'input'" class="px-6 py-4 border-t border-gray-100 flex justify-end gap-2">
+                <button type="button" @click="showAgentCreateModal = false; agentCreateStep = 'input'" class="px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 text-slate-600 hover:bg-slate-50">取消</button>
+                <button type="button" @click="agentCreateStep = 'generating'; agentCreateLoading = true; agentCreateTasks = [{name:'生成角色定义',done:false,active:true},{name:'挂载 Skill/Tools',done:false,active:false},{name:'写入配置文件',done:false,active:false}]; agentCreateProgress = '正在分析需求…'; setTimeout(() => { agentCreateTasks = [{name:'生成角色定义',done:true,active:false},{name:'挂载 Skill/Tools',done:false,active:true},{name:'写入配置文件',done:false,active:false}]; agentCreateProgress = '挂载 Skill/Tools…'; }, 800); setTimeout(() => { agentCreateTasks = [{name:'生成角色定义',done:true,active:false},{name:'挂载 Skill/Tools',done:true,active:false},{name:'写入配置文件',done:false,active:true}]; agentCreateProgress = '写入配置文件…'; }, 1600); setTimeout(() => { agentCreateTasks = [{name:'生成角色定义',done:true,active:false},{name:'挂载 Skill/Tools',done:true,active:false},{name:'写入配置文件',done:true,active:false}]; agentCreateProgress = '完成'; agentCreateLoading = false; showAgentCreateModal = false; agentCreateStep = 'input'; setTimeout(() => lucide.createIcons(), 100); }, 2400)" :disabled="!agentCreateInput.trim() || agentCreateLoading" class="px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
+                    <i data-lucide="sparkles" class="w-4 h-4" aria-hidden="true"></i> 开始生成
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Initialize Lucide Icons -->
+    <script>
+        lucide.createIcons();
+        
+        // Re-init icons when tab changes (Alpine watcher simulation)
+        document.addEventListener('alpine:init', () => {
+            Alpine.effect(() => {
+                // Dependency on currentTab to re-trigger icon rendering
+                const tab = Alpine.store('currentTab'); 
+                setTimeout(() => lucide.createIcons(), 50);
+            });
+
+            // Listen for preview open event
+            window.addEventListener('open-preview', (e) => {
+                const el = document.querySelector('[x-data]');
+                el.__x.$data.previewOpen = true;
+                el.__x.$data.previewTitle = e.detail.title;
+            });
+        });
+    </script>
+</body>
+</html>
