@@ -31,6 +31,11 @@
         .tag-purple { background: #faf5ff; color: #7c3aed; }
         input[type=range] { -webkit-appearance: none; height: 6px; border-radius: 3px; background: #e2e8f0; outline: none; }
         input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #2563eb; cursor: pointer; }
+        @keyframes status-pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.5); }
+            50% { box-shadow: 0 0 0 4px rgba(34,197,94,0); }
+        }
+        .status-dot-active { animation: status-pulse 2s ease-in-out infinite; }
     </style>
 </head>
 <body class="bg-gray-50 text-slate-800 font-sans antialiased h-screen flex overflow-hidden"
@@ -57,32 +62,23 @@
     </div>
 
     <!-- 导航 + 员工列表 -->
-    <nav class="flex-1 flex flex-col min-h-0 overflow-hidden">
+    <nav class="flex-1 flex flex-col min-h-0">
 
         <!-- 员工区块 -->
-        <div class="flex-1 flex flex-col min-h-0 overflow-hidden">
+        <div class="flex-1 flex flex-col min-h-0">
             <!-- 员工区标题行 -->
             <div class="flex items-center justify-between px-3 pt-3 pb-1 flex-shrink-0">
                 <span x-show="sidebarOpen" class="text-xs font-semibold text-slate-400 uppercase tracking-wider">我的员工</span>
                 <i x-show="!sidebarOpen" data-lucide="users" class="w-4 h-4 text-slate-400 mx-auto" aria-hidden="true"></i>
                 <!-- 新增员工按钮（展开时显示在标题右侧） -->
                 <button type="button" x-show="sidebarOpen"
-                        @click="showCreateModal = true; createStep = 1; createForm = { name: '', avatar: '🤖', iconBg: 'bg-blue-100', model: 'spark-4', requirements: '', skills: [] }"
+                        @click="showCreateModal = true; createStep = 1; createForm = { name: '', avatar: '🤖', iconBg: 'bg-blue-100', model: 'spark-4', requirements: '', skills: [] }">
                     <i data-lucide="plus" class="w-4 h-4" aria-hidden="true"></i>
                 </button>
             </div>
 
-            <!-- 搜索框（展开时显示） -->
-            <div class="px-3 pb-2 flex-shrink-0" x-show="sidebarOpen">
-                <div class="relative">
-                    <i data-lucide="search" class="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none"></i>
-                    <input type="search" x-model="employeeSearch" placeholder="搜索员工…"
-                           class="w-full pl-7 pr-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50">
-                </div>
-            </div>
-
-            <!-- 员工列表（可滚动） -->
-            <div class="flex-1 overflow-y-auto px-2 pb-2">
+            <!-- 员工列表 -->
+            <div class="flex-1 px-2 pb-2 overflow-y-hidden">
                 <!-- 默认员工（置顶） -->
                 <template x-for="emp in employeeList.filter(e => e.type === 'default')" :key="emp.id">
                     <button type="button"
@@ -91,9 +87,15 @@
                             :class="selectedEmployeeId === emp.id && (currentTab === 'employees' || currentTab === 'employee-detail') ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-gray-100'"
                             :title="!sidebarOpen ? emp.name + ' · ' + emp.position : ''">
                         <!-- 头像 -->
-                        <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-lg"
-                             :class="emp.iconBg">
-                            <span x-text="emp.avatar"></span>
+                        <div class="relative flex-shrink-0">
+                            <div class="w-8 h-8 rounded-lg flex items-center justify-center text-lg"
+                                 :class="emp.iconBg">
+                                <span x-text="emp.avatar"></span>
+                            </div>
+                            <!-- Status dot -->
+                            <span class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white"
+                                  :class="getDotColor(emp) === '#22c55e' ? 'status-dot-active' : ''"
+                                  :style="'background:' + getDotColor(emp)"></span>
                         </div>
                         <!-- 名字 + 标识（展开时显示） -->
                         <div class="flex-1 min-w-0" x-show="sidebarOpen">
@@ -111,26 +113,60 @@
 
                 <!-- 其他员工 -->
                 <template x-for="emp in filteredEmployees.filter(e => e.type !== 'default')" :key="emp.id">
-                    <button type="button"
-                            @click="selectedEmployeeId = emp.id; currentTab = 'employees'; selectedConversationId = null; showHistoryDrawer = false; showProfileDrawer = false"
-                            class="w-full flex items-center gap-2.5 px-2 py-2 rounded-xl transition-colors text-left mb-0.5"
-                            :class="selectedEmployeeId === emp.id && (currentTab === 'employees' || currentTab === 'employee-detail') ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-gray-100'"
-                            :title="!sidebarOpen ? emp.name + ' · ' + emp.position : ''">
-                        <!-- 头像 -->
-                        <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-lg"
-                             :class="emp.iconBg">
-                            <span x-text="emp.avatar"></span>
-                        </div>
-                        <!-- 名字 + 岗位 + vibe（展开时显示） -->
-                        <div class="flex-1 min-w-0" x-show="sidebarOpen">
-                            <div class="flex items-baseline gap-1.5 min-w-0">
-                                <span class="text-sm font-medium text-slate-800 flex-shrink-0" x-text="emp.name"></span>
-                                <span class="text-xs text-slate-400 truncate" x-text="emp.position"></span>
-                                <span x-show="emp.type === 'custom'" class="tag tag-purple flex-shrink-0 text-[10px]">自建</span>
+                    <div class="relative group/emp mb-0.5">
+                        <button type="button"
+                                @click="selectedEmployeeId = emp.id; currentTab = 'employees'; selectedConversationId = null; showHistoryDrawer = false; showProfileDrawer = false; if(emp.onlineStatus === 'error') emp.onlineStatus = 'idle'"
+                                class="w-full flex items-center gap-2.5 px-2 py-2 rounded-xl transition-colors text-left"
+                                :class="selectedEmployeeId === emp.id && (currentTab === 'employees' || currentTab === 'employee-detail') ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-gray-100'"
+                                :title="!sidebarOpen ? emp.name + ' · ' + emp.position : ''">
+                            <!-- 头像 + 状态圆点 + 角标 -->
+                            <div class="relative flex-shrink-0">
+                                <div class="w-8 h-8 rounded-lg flex items-center justify-center text-lg"
+                                     :class="emp.iconBg">
+                                    <span x-text="emp.avatar"></span>
+                                </div>
+                                <!-- Status dot (bottom-right) -->
+                                <span class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white"
+                                      :class="getDotColor(emp) === '#22c55e' ? 'status-dot-active' : ''"
+                                      :style="'background:' + getDotColor(emp)"></span>
+                                <!-- Task count badge (top-right, only when ≥2) -->
+                                <span x-show="getActiveSessionCount(emp) >= 2"
+                                      class="absolute -top-1 -right-1 min-w-[14px] h-3.5 px-0.5 bg-blue-500 text-white text-[8px] font-bold rounded-full border-2 border-white flex items-center justify-center tabular-nums"
+                                      x-text="getActiveSessionCount(emp)"></span>
                             </div>
-                            <p class="text-xs truncate mt-0.5 opacity-50" x-text="getEmployeeVibe(emp)"></p>
+                            <!-- 名字 + 岗位 + vibe（展开时显示） -->
+                            <div class="flex-1 min-w-0" x-show="sidebarOpen">
+                                <div class="flex items-baseline gap-1.5 min-w-0">
+                                    <span class="text-sm font-medium text-slate-800 flex-shrink-0" x-text="emp.name"></span>
+                                    <span class="text-xs text-slate-400 truncate" x-text="emp.position"></span>
+                                    <span x-show="emp.type === 'custom'" class="tag tag-purple flex-shrink-0 text-[10px]">自建</span>
+                                </div>
+                                <p class="text-xs truncate mt-0.5 opacity-50" x-text="getEmployeeVibe(emp)"></p>
+                            </div>
+                        </button>
+
+                        <!-- Hover flyout (only when activeSessions non-empty) -->
+                        <div x-show="(emp.activeSessions || []).length > 0"
+                             class="absolute left-full top-0 ml-2 z-50 w-52 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden
+                                    opacity-0 pointer-events-none group-hover/emp:opacity-100 group-hover/emp:pointer-events-auto
+                                    transition-opacity duration-150">
+                            <div class="px-3 py-2 border-b border-gray-100">
+                                <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">进行中的任务</span>
+                            </div>
+                            <div class="py-1.5 px-2">
+                                <template x-for="sess in (emp.activeSessions || [])" :key="sess.id">
+                                    <div class="flex items-center gap-2 px-2 py-1.5 rounded-lg">
+                                        <span class="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                                              :style="sess.status === 'running' ? 'background:#22c55e' : sess.status === 'waiting' ? 'background:#f59e0b' : 'background:#ef4444'"></span>
+                                        <span class="text-xs text-slate-700 truncate flex-1" x-text="sess.title"></span>
+                                        <span class="text-[10px] flex-shrink-0"
+                                              :class="sess.status === 'running' ? 'text-green-500' : sess.status === 'waiting' ? 'text-amber-500' : 'text-red-500'"
+                                              x-text="sess.status === 'running' ? '执行中' : sess.status === 'waiting' ? '等待中' : '失败'"></span>
+                                    </div>
+                                </template>
+                            </div>
                         </div>
-                    </button>
+                    </div>
                 </template>
                 <div x-show="filteredEmployees.filter(e => e.type !== 'default').length === 0 && sidebarOpen && employeeSearch" class="py-4 text-center text-xs text-slate-400">未找到员工</div>
             </div>
@@ -149,7 +185,7 @@
         <!-- 分隔线 -->
         <div class="border-t border-gray-200 mx-3 flex-shrink-0"></div>
 
-        <!-- 底부 导航：日历 / 市场 / 设置 -->
+        <!-- 底部导航：日历 / 员工管理 / 人才市场 / 设置 -->
         <div class="px-3 py-3 space-y-0.5 flex-shrink-0">
             <!-- 工作日历 -->
             <button type="button" @click="currentTab = 'calendar'" aria-label="工作日历"
@@ -162,8 +198,15 @@
             <button type="button" @click="currentTab = 'market'" aria-label="员工管理"
                     class="w-full flex items-center px-3 py-2 text-sm font-medium rounded-xl transition-colors"
                     :class="currentTab === 'market' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-gray-100'">
-                <i data-lucide="store" class="w-5 h-5 flex-shrink-0" aria-hidden="true"></i>
+                <i data-lucide="users" class="w-5 h-5 flex-shrink-0" aria-hidden="true"></i>
                 <span class="ml-3 truncate" x-show="sidebarOpen">员工管理</span>
+            </button>
+            <!-- 人才市场 -->
+            <button type="button" @click="currentTab = 'talent-market'" aria-label="人才市场"
+                    class="w-full flex items-center px-3 py-2 text-sm font-medium rounded-xl transition-colors"
+                    :class="currentTab === 'talent-market' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-gray-100'">
+                <i data-lucide="store" class="w-5 h-5 flex-shrink-0" aria-hidden="true"></i>
+                <span class="ml-3 truncate" x-show="sidebarOpen">人才市场</span>
             </button>
             <!-- 设置 -->
             <button type="button" @click="currentTab = 'settings'" aria-label="设置"
@@ -234,6 +277,13 @@
                             </div>
                             <div class="flex items-center gap-1 mt-0.5">
                                 <span class="text-[11px] text-slate-400 truncate" x-text="getEmployeeVibe(selectedEmployee)"></span>
+                                <span class="text-slate-300 text-[11px]">·</span>
+                                <button type="button" @click="openWorkspace(selectedEmployee)"
+                                        class="text-[11px] text-slate-400 hover:text-amber-600 transition-colors flex items-center gap-0.5 truncate max-w-xs"
+                                        :title="getWorkspacePath(selectedEmployee)">
+                                    <i data-lucide="folder-open" class="w-3 h-3 flex-shrink-0"></i>
+                                    <span class="truncate" x-text="getWorkspacePath(selectedEmployee)"></span>
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -251,11 +301,15 @@
                         <div class="relative" x-data="{ open: false }" @click.outside="open = false">
                             <button type="button"
                                     @click="open = !open; showProfileDrawer = false"
-                                    class="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors"
+                                    class="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors relative"
                                     :class="open ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-gray-100'">
                                 <i data-lucide="history" class="w-3.5 h-3.5" aria-hidden="true"></i>
                                 <span x-text="selectedConversationId ? (selectedEmployeeConversations.find(c=>c.id===selectedConversationId)?.title || '历史') : '历史'" class="max-w-[100px] truncate"></span>
                                 <i data-lucide="chevron-down" class="w-3 h-3 opacity-60" aria-hidden="true"></i>
+                                <!-- Task badge -->
+                                <span x-show="selectedEmployee && (selectedEmployee.activeSessions || []).filter(s => s.status === 'completed' || s.status === 'running' || s.status === 'waiting').length > 0"
+                                      class="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center"
+                                      x-text="(selectedEmployee.activeSessions || []).filter(s => s.status === 'completed' || s.status === 'running' || s.status === 'waiting').length"></span>
                             </button>
                             <!-- 历史会话浮层 -->
                             <div x-show="open" x-cloak x-transition
@@ -266,7 +320,35 @@
                                            class="text-xs border border-gray-200 rounded-lg px-2 py-1 w-28 focus:ring-1 focus:ring-blue-400 focus:border-transparent">
                                 </div>
                                 <div class="max-h-64 overflow-y-auto py-1">
-                                    <template x-for="conv in selectedEmployeeConversations" :key="conv.id">
+                                    <!-- 进行中分组 (only shown when employee has active sessions) -->
+                                    <template x-if="(selectedEmployee?.activeSessions || []).length > 0">
+                                        <div>
+                                            <div class="px-3 py-1 mt-1">
+                                                <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">进行中</span>
+                                            </div>
+                                            <template x-for="sess in (selectedEmployee?.activeSessions || [])" :key="sess.id">
+                                                <div class="group flex items-center gap-2.5 px-3 py-2 mx-1 rounded-lg transition-colors cursor-pointer"
+                                                     :class="selectedConversationId === (selectedEmployeeConversations.find(c => c.sessionId === sess.id)?.id) ? 'bg-blue-50 text-blue-700' : 'hover:bg-green-50'"
+                                                     @click="const conv = selectedEmployeeConversations.find(c => c.sessionId === sess.id); if(conv) { selectedConversationId = conv.id; open = false; }">
+                                                    <!-- Pulsing dot -->
+                                                    <span class="w-2 h-2 rounded-full flex-shrink-0 status-dot-active"
+                                                          style="background:#22c55e; box-shadow: 0 0 0 3px #dcfce7;"></span>
+                                                    <div class="flex-1 min-w-0">
+                                                        <p class="text-sm font-medium text-green-700 truncate" x-text="sess.title"></p>
+                                                        <p class="text-xs text-green-400 mt-0.5" x-text="sess.status === 'running' ? '执行中' : '等待中'"></p>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                            <!-- Divider -->
+                                            <div class="mx-3 my-1 border-t border-gray-100"></div>
+                                            <div class="px-3 py-1">
+                                                <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">历史</span>
+                                            </div>
+                                        </div>
+                                    </template>
+
+                                    <!-- All conversations (history section) -->
+                                    <template x-for="conv in selectedEmployeeConversations.filter(c => !c.active)" :key="conv.id">
                                         <div class="group flex items-center px-3 py-2 mx-1 rounded-lg transition-colors cursor-pointer"
                                              :class="selectedConversationId === conv.id ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50 text-slate-700'"
                                              @click="selectedConversationId = conv.id; open = false">
@@ -299,67 +381,153 @@
 
                                 <!-- 欢迎首页（未选对话时） -->
                                 <div x-show="selectedConversationId === null"
-                                     class="flex flex-col items-center justify-center min-h-[calc(100vh-12rem)] px-4">
+                                     class="flex flex-col items-center justify-center min-h-[calc(100vh-12rem)] px-4 py-8">
                                     <div class="w-full max-w-xl">
-                                        <!-- 员工身份 -->
-                                        <div class="flex items-center gap-3 mb-5">
-                                            <div class="w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm flex-shrink-0 text-2xl"
-                                                 :class="selectedEmployee.iconBg">
-                                                <span x-text="selectedEmployee.avatar"></span>
-                                            </div>
-                                            <div>
-                                                <h2 class="text-base font-semibold text-slate-800 leading-tight" x-text="selectedEmployee.name"></h2>
-                                                <p class="text-xs text-slate-400 mt-0.5" x-text="selectedEmployee.position"></p>
-                                            </div>
-                                        </div>
 
-                                        <!-- 打招呼 -->
-                                        <p class="text-slate-600 text-sm leading-relaxed mb-5 whitespace-pre-line"
-                                           x-text="selectedEmployee.greeting || '你好！我是 ' + selectedEmployee.name + '，' + selectedEmployee.bio"></p>
-
-                                        <!-- 默认员工：团队成员入口 -->
+                                        <!-- ===== DEFAULT EMPLOYEE (小飞) WELCOME ===== -->
                                         <template x-if="selectedEmployee.type === 'default'">
-                                            <div class="mb-5">
-                                                <p class="text-xs font-medium text-slate-400 mb-2 uppercase tracking-wide">团队成员</p>
-                                                <div class="flex items-center gap-2 flex-wrap">
-                                                    <template x-for="emp in employeeList.filter(e => e.type !== 'default')" :key="emp.id">
-                                                        <button type="button"
-                                                                @click="selectedEmployeeId = emp.id; selectedConversationId = null"
-                                                                class="flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-all text-left">
-                                                            <span class="text-base" x-text="emp.avatar"></span>
-                                                            <span class="text-xs font-medium text-slate-700" x-text="emp.name"></span>
-                                                            <span class="text-[10px] text-slate-400 truncate max-w-[70px]" x-text="emp.position"></span>
-                                                        </button>
+                                            <div>
+                                                <!-- Compact identity row -->
+                                                <div class="flex items-center gap-3 mb-5">
+                                                    <div class="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 text-2xl"
+                                                         :class="selectedEmployee.iconBg">
+                                                        <span x-text="selectedEmployee.avatar"></span>
+                                                    </div>
+                                                    <div>
+                                                        <div class="flex items-center gap-2">
+                                                            <h2 class="text-base font-bold text-slate-800" x-text="selectedEmployee.name"></h2>
+                                                            <span class="px-1.5 py-0.5 bg-blue-100 text-blue-600 text-[10px] font-semibold rounded-full">默认助理</span>
+                                                        </div>
+                                                        <p class="text-xs text-slate-400 mt-0.5" x-text="selectedEmployee.position"></p>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Greeting -->
+                                                <p class="text-sm text-slate-600 leading-relaxed mb-6 whitespace-pre-line"
+                                                   x-text="selectedEmployee.greeting"></p>
+
+                                                <!-- Team status card -->
+                                                <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2.5">目前团队状态</p>
+                                                <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden mb-6">
+
+                                                    <!-- Pending review section - flat task list -->
+                                                    <template x-if="employeeList.flatMap(e => (e.activeSessions || []).filter(s => s.status === 'completed').map(s => ({emp: e, sess: s}))).length > 0">
+                                                        <div class="px-3 py-2">
+                                                            <p class="text-[10px] font-semibold text-amber-600 uppercase tracking-wider mb-2">
+                                                                待审查任务<span x-text="employeeList.flatMap(e => (e.activeSessions || []).filter(s => s.status === 'completed')).length"></span>个
+                                                            </p>
+                                                            <div class="space-y-0.5">
+                                                                <template x-for="item in employeeList.flatMap(e => (e.activeSessions || []).filter(s => s.status === 'completed').map(s => ({emp: e, sess: s})))" :key="item.sess.id">
+                                                                    <button type="button"
+                                                                            @click="selectedEmployeeId = item.emp.id; currentTab = 'employees'; selectedConversationId = (item.emp.conversations || []).find(c => c.sessionId === item.sess.id)?.id || null"
+                                                                            class="flex items-center gap-2 w-full text-left hover:bg-amber-50 rounded px-2 py-1 transition-colors">
+                                                                        <span class="w-3 h-3 rounded-full flex items-center justify-center flex-shrink-0 bg-amber-100 text-amber-600 text-[9px] font-bold">✓</span>
+                                                                        <span class="text-xs flex-shrink-0" x-text="item.emp.avatar"></span>
+                                                                        <span class="text-xs font-medium text-slate-700 flex-shrink-0" x-text="item.emp.name"></span>
+                                                                        <span class="text-xs text-slate-500 flex-1 min-w-0" x-text="item.sess.title"></span>
+                                                                    </button>
+                                                                </template>
+                                                            </div>
+                                                        </div>
                                                     </template>
-                                                    <button type="button"
-                                                            @click="currentTab = 'market'"
-                                                            class="flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-dashed border-gray-300 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-all text-slate-400 hover:text-blue-600">
-                                                        <i data-lucide="plus" class="w-3.5 h-3.5"></i>
-                                                        <span class="text-xs">引入更多</span>
-                                                    </button>
+
+                                                    <!-- Active tasks - flat task list (running/waiting only) -->
+                                                    <template x-if="employeeList.flatMap(e => (e.activeSessions || []).filter(s => s.status === 'running' || s.status === 'waiting').map(s => ({emp: e, sess: s}))).length > 0">
+                                                        <div class="px-3 py-2" :class="employeeList.flatMap(e => (e.activeSessions || []).filter(s => s.status === 'completed').map(s => ({emp: e, sess: s}))).length > 0 ? 'border-t border-gray-100' : ''">
+                                                            <p class="text-[10px] font-semibold text-green-500 uppercase tracking-wider mb-2">
+                                                                忙碌中任务<span x-text="employeeList.flatMap(e => (e.activeSessions || []).filter(s => s.status === 'running' || s.status === 'waiting')).length"></span>个
+                                                            </p>
+                                                            <div class="space-y-0.5">
+                                                                <template x-for="item in employeeList.flatMap(e => (e.activeSessions || []).filter(s => s.status === 'running' || s.status === 'waiting').map(s => ({emp: e, sess: s})))" :key="item.sess.id">
+                                                                    <div class="flex items-center gap-2 px-2 py-1">
+                                                                        <span class="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                                                                              :style="item.sess.status === 'running' ? 'background:#22c55e' : 'background:#f59e0b'"></span>
+                                                                        <span class="text-xs flex-shrink-0" x-text="item.emp.avatar"></span>
+                                                                        <span class="text-xs font-medium text-slate-700 flex-shrink-0" x-text="item.emp.name"></span>
+                                                                        <span class="text-xs text-slate-500 flex-1 min-w-0" x-text="item.sess.title"></span>
+                                                                    </div>
+                                                                </template>
+                                                            </div>
+                                                        </div>
+                                                    </template>
+
+                                                    <!-- Idle agents -->
+                                                    <template x-if="employeeList.filter(e => e.type !== 'default' && (e.activeSessions || []).filter(s => s.status === 'running' || s.status === 'waiting' || s.status === 'completed').length === 0).length > 0">
+                                                        <div class="px-3 py-2 border-t border-gray-100">
+                                                            <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                                                                空闲中<span x-text="employeeList.filter(e => e.type !== 'default' && (e.activeSessions || []).filter(s => s.status === 'running' || s.status === 'waiting' || s.status === 'completed').length === 0).length"></span>个
+                                                            </p>
+                                                            <div class="flex flex-wrap gap-1.5">
+                                                                <template x-for="emp in employeeList.filter(e => e.type !== 'default' && (e.activeSessions || []).filter(s => s.status === 'running' || s.status === 'waiting' || s.status === 'completed').length === 0)" :key="emp.id">
+                                                                    <button type="button"
+                                                                            @click="selectedEmployeeId = emp.id; selectedConversationId = null"
+                                                                            class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
+                                                                        <span class="text-sm" x-text="emp.avatar"></span>
+                                                                        <span class="text-xs text-slate-500" x-text="emp.name"></span>
+                                                                    </button>
+                                                                </template>
+                                                            </div>
+                                                        </div>
+                                                    </template>
+
                                                 </div>
                                             </div>
                                         </template>
 
-                                        <!-- 技能卡片 -->
-                                        <div class="grid grid-cols-2 gap-2 mb-6">
-                                            <template x-for="sc in (selectedEmployee.skillCards || [])" :key="sc.name">
-                                                <button type="button"
-                                                        @click="chatInput = sc.prompt || sc.name; $nextTick(() => sendMessage())"
-                                                        class="flex items-start gap-2.5 p-3 bg-white border border-gray-200 rounded-xl text-left hover:border-blue-300 hover:bg-blue-50 hover:-translate-y-0.5 hover:shadow-md transition-all duration-150 group">
-                                                    <div class="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
-                                                         :class="sc.iconBg || 'bg-slate-100'">
-                                                        <i :data-lucide="sc.icon || 'zap'" class="w-3.5 h-3.5" :class="sc.iconColor || 'text-slate-500'" aria-hidden="true"></i>
+                                        <!-- ===== NON-DEFAULT EMPLOYEE WELCOME ===== -->
+                                        <template x-if="selectedEmployee.type !== 'default'">
+                                            <div>
+                                                <!-- Employee identity card -->
+                                                <div class="flex items-center gap-3 mb-5 p-4 bg-white border border-gray-200 rounded-2xl shadow-sm">
+                                                    <div class="relative flex-shrink-0">
+                                                        <div class="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shadow-sm"
+                                                             :class="selectedEmployee.iconBg">
+                                                            <span x-text="selectedEmployee.avatar"></span>
+                                                        </div>
+                                                        <!-- Status dot on avatar -->
+                                                        <span class="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white"
+                                                              :class="getDotColor(selectedEmployee) === '#22c55e' ? 'status-dot-active' : ''"
+                                                              :style="'background:' + getDotColor(selectedEmployee)"></span>
                                                     </div>
-                                                    <div class="min-w-0 flex-1">
-                                                        <p class="text-sm font-medium text-slate-700 group-hover:text-blue-700 leading-tight mb-1" x-text="sc.name"></p>
-                                                        <p class="text-xs text-slate-400 line-clamp-2 leading-relaxed" x-text="sc.desc"></p>
+                                                    <div class="flex-1 min-w-0">
+                                                        <div class="flex items-center gap-2 mb-1">
+                                                            <h2 class="text-base font-bold text-slate-800" x-text="selectedEmployee.name"></h2>
+                                                            <span class="text-[10px] font-medium px-1.5 py-0.5 rounded-md"
+                                                                  :class="selectedEmployee.type === 'custom' ? 'bg-purple-100 text-purple-600' : 'bg-gray-100 text-gray-500'"
+                                                                  x-text="selectedEmployee.type === 'custom' ? '自建员工' : '内置员工'"></span>
+                                                        </div>
+                                                        <p class="text-xs text-slate-400" x-text="selectedEmployee.position"></p>
+                                                        <p class="text-xs mt-1 font-medium"
+                                                           :class="getActiveSessionCount(selectedEmployee) > 0 ? 'text-green-600' : 'text-slate-400'"
+                                                           x-text="getActiveSessionCount(selectedEmployee) > 0 ? '🔥 ' + getEmployeeVibe(selectedEmployee) : getEmployeeVibe(selectedEmployee)"></p>
                                                     </div>
-                                                </button>
-                                            </template>
-                                        </div>
+                                                </div>
 
-                                        <!-- 输入框 -->
+                                                <!-- Greeting -->
+                                                <p class="text-sm text-slate-600 leading-relaxed mb-5 px-1 whitespace-pre-line"
+                                                   x-text="selectedEmployee.greeting || '你好！我是 ' + selectedEmployee.name + '，' + selectedEmployee.bio"></p>
+
+                                                <!-- Skill cards -->
+                                                <div class="grid grid-cols-2 gap-2 mb-6">
+                                                    <template x-for="sc in (selectedEmployee.skillCards || [])" :key="sc.name">
+                                                        <button type="button"
+                                                                @click="chatInput = sc.prompt || sc.name; $nextTick(() => sendMessage())"
+                                                                class="flex items-start gap-2.5 p-3 bg-white border border-gray-200 rounded-xl text-left hover:border-blue-300 hover:bg-blue-50 hover:-translate-y-0.5 hover:shadow-md transition-all duration-150 group shadow-sm">
+                                                            <div class="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
+                                                                 :class="sc.iconBg || 'bg-slate-100'">
+                                                                <i :data-lucide="sc.icon || 'zap'" class="w-3.5 h-3.5" :class="sc.iconColor || 'text-slate-500'" aria-hidden="true"></i>
+                                                            </div>
+                                                            <div class="min-w-0 flex-1">
+                                                                <p class="text-sm font-medium text-slate-700 group-hover:text-blue-700 leading-tight mb-1" x-text="sc.name"></p>
+                                                                <p class="text-xs text-slate-400 line-clamp-2 leading-relaxed" x-text="sc.desc"></p>
+                                                            </div>
+                                                        </button>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                        </template>
+
+                                        <!-- ===== SHARED: Chat input (both employee types) ===== -->
                                         <div class="bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-md focus-within:shadow-md focus-within:border-blue-400 transition-all relative">
                                             <div class="flex flex-wrap items-baseline gap-2 px-4 pt-4 pb-2 min-h-[2.5rem]">
                                                 <template x-if="atMentionedAgent">
@@ -372,7 +540,7 @@
                                                 <textarea x-model="chatInput" rows="3"
                                                     @input="handleAtInput($event)"
                                                     @keydown="handleAtKeydown($event)"
-                                                    placeholder="向员工发送指令，输入 @ 调度其他员工…" aria-label="输入指令"
+                                                    :placeholder="selectedEmployee?.type === 'default' ? '向员工发送指令，输入 @ 调度其他员工…' : '向员工发送指令…'" aria-label="输入指令"
                                                     class="flex-1 min-w-[12rem] bg-transparent border-none focus:ring-0 focus-visible:outline-none resize-none text-sm placeholder-slate-400 text-slate-700"></textarea>
                                             </div>
                                             <!-- @ 选择面板 -->
@@ -399,13 +567,14 @@
                                             <!-- 底部工具栏 -->
                                             <div class="flex justify-between items-center px-3 pb-3 pt-1">
                                                 <div class="flex items-center gap-0.5">
-                                                    <!-- 文件上传 -->
                                                     <label class="p-1.5 rounded-lg transition-colors text-slate-400 hover:text-blue-600 hover:bg-blue-50 cursor-pointer" title="上传文件">
                                                         <i data-lucide="paperclip" class="w-4 h-4" aria-hidden="true"></i>
                                                         <input type="file" class="hidden" multiple @change="showToastMsg('文件已选择：' + $event.target.files.length + ' 个')">
                                                     </label>
-                                                    <!-- @ 调度 -->
-                                                    <button type="button" @click="showAtPanel = true; atSearch = ''" aria-label="@ 调度员工"
+                                                    <!-- @ 调度按钮：仅默认员工可用 -->
+                                                    <button type="button"
+                                                            x-show="selectedEmployee?.type === 'default'"
+                                                            @click="showAtPanel = true; atSearch = ''" aria-label="@ 调度员工"
                                                             class="p-1.5 rounded-lg transition-colors text-slate-400 hover:text-blue-600 hover:bg-blue-50">
                                                         <i data-lucide="at-sign" class="w-4 h-4" aria-hidden="true"></i>
                                                     </button>
@@ -417,14 +586,6 @@
                                             </div>
                                         </div>
 
-                                        <!-- 工作区路径 -->
-                                        <div class="flex items-center gap-1.5 mt-2.5 px-1">
-                                            <i data-lucide="folder" class="w-3.5 h-3.5 text-slate-300 flex-shrink-0"></i>
-                                            <button type="button" @click="openWorkspace(selectedEmployee)"
-                                                    class="text-xs font-mono text-slate-300 hover:text-slate-500 truncate transition-colors text-left"
-                                                    :title="getWorkspacePath(selectedEmployee)"
-                                                    x-text="getWorkspacePath(selectedEmployee)"></button>
-                                        </div>
                                     </div>
                                 </div>
 
@@ -902,44 +1063,31 @@
         <!-- 页面标题 -->
         <div class="mb-5">
             <h2 class="text-xl font-semibold text-slate-800">员工管理</h2>
-            <p class="text-sm text-slate-500 mt-1">管理你的数字员工团队，或从人才市场引入新成员</p>
+            <p class="text-sm text-slate-500 mt-1">管理你的数字员工团队</p>
         </div>
 
-        <!-- 共享工具栏：Tab + 搜索 + 操作按钮 -->
+        <!-- 工具栏：搜索 + 操作按钮 -->
         <div class="flex items-center gap-3 mb-5">
-            <!-- Tab 切换 -->
-            <div class="flex items-center gap-0 bg-white border border-gray-200 rounded-xl p-1 flex-shrink-0">
-                <button type="button" @click="marketTab = 'mine'"
-                        class="px-4 py-1.5 text-sm font-medium rounded-lg transition-colors"
-                        :class="marketTab === 'mine' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-gray-100'">我的员工</button>
-                <button type="button" @click="marketTab = 'market'"
-                        class="px-4 py-1.5 text-sm font-medium rounded-lg transition-colors"
-                        :class="marketTab === 'market' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-gray-100'">人才市场</button>
-            </div>
             <!-- 搜索框 -->
             <div class="relative flex-1 max-w-xs">
                 <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none"></i>
                 <input type="search" x-model="marketSearch"
-                       :placeholder="marketTab === 'mine' ? '搜索员工…' : '搜索人才市场…'"
+                       placeholder="搜索员工…"
                        class="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white">
             </div>
-            <!-- 条件操作按钮 -->
+            <!-- 操作按钮 -->
             <div class="ml-auto flex-shrink-0">
-                <button x-show="marketTab === 'mine'" type="button"
+                <button type="button"
                         @click="showCreateModal = true; createStep = 1; createForm = { name: '', avatar: '🤖', iconBg: 'bg-blue-100', model: 'spark-4', requirements: '', skills: [] }"
                         class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
                     <i data-lucide="user-plus" class="w-4 h-4"></i>
                     新建员工
                 </button>
-                <div x-show="marketTab === 'market'" class="flex items-center gap-1.5 text-xs text-slate-400">
-                    <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
-                    <span>发现精选数字员工</span>
-                </div>
             </div>
         </div>
 
-        <!-- ===== 我的员工 Tab ===== -->
-        <div x-show="marketTab === 'mine'">
+        <!-- ===== 我的员工 ===== -->
+        <div>
 
             <!-- 团队概览 Banner -->
             <div class="bg-white border border-gray-200 rounded-xl px-5 py-4 mb-4 flex items-center gap-6">
@@ -973,7 +1121,7 @@
                     </div>
                 </div>
                 <div class="ml-auto">
-                    <button type="button" @click="marketTab = 'market'"
+                    <button type="button" @click="currentTab = 'talent-market'"
                             class="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium transition-colors">
                         <i data-lucide="store" class="w-3.5 h-3.5"></i>
                         去人才市场
@@ -1050,7 +1198,7 @@
                         <p class="text-xs text-slate-400 mt-1">去人才市场引入员工或新建自己的员工</p>
                     </div>
                     <div class="flex items-center gap-2 mt-2">
-                        <button type="button" @click="marketTab = 'market'"
+                        <button type="button" @click="currentTab = 'talent-market'"
                                 class="px-4 py-2 text-sm font-medium text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors">
                             去人才市场
                         </button>
@@ -1064,25 +1212,78 @@
             </div>
         </div>
 
-        <!-- ===== 人才市场 Tab ===== -->
-        <div x-show="marketTab === 'market'">
+    </div>
+</div>
 
-            <!-- 分类筛选 -->
-            <div class="flex items-center gap-2 mb-4 flex-wrap">
+<!-- ===== VIEW: 人才市场 ===== -->
+<div x-show="currentTab === 'talent-market'" x-cloak class="flex-1 overflow-y-auto bg-gray-50">
+    <div class="max-w-6xl mx-auto px-6 py-6">
+
+        <!-- 页面标题 -->
+        <div class="mb-5">
+            <h2 class="text-xl font-semibold text-slate-800">人才市场</h2>
+            <p class="text-sm text-slate-500 mt-1">发现和引入新员工、获取新技能</p>
+        </div>
+
+        <!-- 决策引导卡（Tab 切换器） -->
+        <div class="grid grid-cols-2 gap-3 mb-5">
+            <button type="button" @click="talentMarketTab = 'recruit'"
+                    class="relative flex items-start gap-3 p-4 rounded-xl border-2 text-left transition-all"
+                    :class="talentMarketTab === 'recruit'
+                        ? 'border-blue-500 bg-blue-50/60 shadow-sm'
+                        : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'">
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-xl"
+                     :class="talentMarketTab === 'recruit' ? 'bg-blue-100' : 'bg-gray-100'">🧑</div>
+                <div class="min-w-0">
+                    <p class="text-sm font-semibold" :class="talentMarketTab === 'recruit' ? 'text-blue-700' : 'text-slate-700'">招募新员工</p>
+                    <p class="text-xs mt-0.5" :class="talentMarketTab === 'recruit' ? 'text-blue-500' : 'text-slate-400'">需要专属角色处理长期/复杂任务</p>
+                </div>
+                <div x-show="talentMarketTab === 'recruit'" class="absolute top-2.5 right-2.5">
+                    <i data-lucide="check-circle-2" class="w-4 h-4 text-blue-500"></i>
+                </div>
+            </button>
+            <button type="button" @click="talentMarketTab = 'skills'"
+                    class="relative flex items-start gap-3 p-4 rounded-xl border-2 text-left transition-all"
+                    :class="talentMarketTab === 'skills'
+                        ? 'border-blue-500 bg-blue-50/60 shadow-sm'
+                        : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'">
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-xl"
+                     :class="talentMarketTab === 'skills' ? 'bg-blue-100' : 'bg-gray-100'">⚡</div>
+                <div class="min-w-0">
+                    <p class="text-sm font-semibold" :class="talentMarketTab === 'skills' ? 'text-blue-700' : 'text-slate-700'">获取技能</p>
+                    <p class="text-xs mt-0.5" :class="talentMarketTab === 'skills' ? 'text-blue-500' : 'text-slate-400'">扩展现有员工能力，一次学习多人可用</p>
+                </div>
+                <div x-show="talentMarketTab === 'skills'" class="absolute top-2.5 right-2.5">
+                    <i data-lucide="check-circle-2" class="w-4 h-4 text-blue-500"></i>
+                </div>
+            </button>
+        </div>
+
+        <!-- 搜索 + 分类筛选 -->
+        <div class="flex items-center gap-3 mb-4 flex-wrap">
+            <div class="relative flex-1 max-w-xs">
+                <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none"></i>
+                <input type="search" x-model="talentMarketSearch"
+                       :placeholder="talentMarketTab === 'recruit' ? '搜索员工…' : '搜索技能…'"
+                       class="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white">
+            </div>
+            <div class="flex items-center gap-1.5 flex-wrap">
                 <template x-for="cat in ['全部', '效率', '开发', '翻译', '创作', '分析']" :key="cat">
-                    <button type="button" @click="marketCategory = cat"
+                    <button type="button" @click="talentMarketCategory = cat"
                             class="px-3 py-1.5 text-xs font-medium rounded-full border transition-colors"
-                            :class="marketCategory === cat
+                            :class="talentMarketCategory === cat
                                 ? 'bg-blue-600 text-white border-blue-600'
                                 : 'bg-white text-slate-600 border-gray-200 hover:border-blue-300 hover:text-blue-600'">
                         <span x-text="cat"></span>
                     </button>
                 </template>
             </div>
+        </div>
 
-            <!-- 员工卡片网格 -->
+        <!-- ===== 招募新员工 Tab ===== -->
+        <div x-show="talentMarketTab === 'recruit'">
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <template x-for="emp in filteredMarketEmployees" :key="emp.id">
+                <template x-for="emp in filteredTalentEmployees" :key="emp.id">
                     <div class="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md hover:border-gray-300 transition-all flex flex-col">
                         <!-- 头部：头像 + 标签 -->
                         <div class="flex items-start justify-between gap-3 mb-3">
@@ -1097,17 +1298,25 @@
 
                         <!-- 名字 + 职位 -->
                         <h3 class="text-base font-semibold text-slate-800 mb-0.5" x-text="emp.name"></h3>
-                        <p class="text-xs text-slate-400 mb-3" x-text="emp.position"></p>
+                        <p class="text-xs text-slate-400 mb-2" x-text="emp.position"></p>
 
                         <!-- 简介 -->
                         <p class="text-xs text-slate-500 line-clamp-2 mb-3 flex-1" x-text="emp.bio"></p>
 
-                        <!-- 技能标签 -->
-                        <div class="flex flex-wrap gap-1 mb-3">
+                        <!-- 技能标签（可点击跳转技能 Tab） -->
+                        <div class="flex flex-wrap gap-1 mb-2">
                             <template x-for="skill in (emp.skills || []).slice(0, 3)" :key="skill">
-                                <span class="tag tag-blue text-[10px]" x-text="skill"></span>
+                                <button type="button"
+                                        @click.stop="talentMarketTab = 'skills'; talentMarketSearch = skill"
+                                        class="tag tag-blue text-[10px] cursor-pointer hover:bg-blue-200 transition-colors"
+                                        x-text="skill"></button>
                             </template>
                         </div>
+
+                        <!-- 引入量 -->
+                        <p class="text-[11px] text-slate-400 mb-3">
+                            已被 <span class="font-medium" x-text="emp.callCount || '0'"></span> 人引入
+                        </p>
 
                         <!-- 操作按钮 -->
                         <div class="flex items-center gap-2">
@@ -1128,7 +1337,7 @@
                 </template>
 
                 <!-- 空状态 -->
-                <div x-show="filteredMarketEmployees.length === 0" class="col-span-full py-16 flex flex-col items-center gap-3 text-center">
+                <div x-show="filteredTalentEmployees.length === 0" class="col-span-full py-16 flex flex-col items-center gap-3 text-center">
                     <div class="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center">
                         <i data-lucide="search" class="w-8 h-8 text-slate-300"></i>
                     </div>
@@ -1137,6 +1346,100 @@
             </div>
         </div>
 
+        <!-- ===== 获取技能 Tab ===== -->
+        <div x-show="talentMarketTab === 'skills'">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <template x-for="skill in filteredMarketSkills" :key="skill.id">
+                    <div class="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md hover:border-gray-300 transition-all flex flex-col">
+                        <!-- 图标 + 名称 -->
+                        <div class="flex items-center gap-3 mb-3">
+                            <div class="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0 text-xl">
+                                <span x-text="skill.icon"></span>
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <h3 class="text-sm font-semibold text-slate-800" x-text="skill.name"></h3>
+                                <div class="flex items-center gap-1.5 mt-0.5">
+                                    <span class="tag tag-gray text-[10px]" x-text="skill.source"></span>
+                                    <span class="tag tag-gray text-[10px]" x-text="skill.category"></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 描述 -->
+                        <p class="text-xs text-slate-500 line-clamp-2 mb-3 flex-1" x-text="skill.desc"></p>
+
+                        <!-- 使用量 -->
+                        <p class="text-[11px] text-slate-400 mb-3">
+                            已被 <span class="font-medium" x-text="skill.usageCount"></span> 人使用
+                        </p>
+
+                        <!-- 操作按钮 -->
+                        <div class="flex items-center gap-2">
+                            <button type="button"
+                                    @click="openSkillAssignModal(skill.id)"
+                                    class="flex-1 px-3 py-1.5 text-sm font-medium rounded-lg text-center transition-colors bg-blue-600 text-white hover:bg-blue-700">
+                                <span class="flex items-center justify-center gap-1.5">
+                                    <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                                    添加到员工
+                                </span>
+                            </button>
+                            <button type="button"
+                                    @click="showToastMsg('技能详情: ' + skill.name + ' — ' + skill.desc)"
+                                    class="px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-200 text-slate-600 hover:bg-gray-50 transition-colors">
+                                详情
+                            </button>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- 空状态 -->
+                <div x-show="filteredMarketSkills.length === 0" class="col-span-full py-16 flex flex-col items-center gap-3 text-center">
+                    <div class="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center">
+                        <i data-lucide="search" class="w-8 h-8 text-slate-300"></i>
+                    </div>
+                    <p class="text-sm text-slate-400">没有找到匹配的技能</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- 技能添加到员工 弹窗 -->
+<div x-show="showSkillAssignModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/40" @click="showSkillAssignModal = false"></div>
+    <div class="relative bg-white rounded-2xl shadow-2xl w-[400px] max-h-[500px] overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-100">
+            <h3 class="text-base font-semibold text-slate-800">选择要添加技能的员工</h3>
+            <p x-show="assigningSkill" class="text-xs text-slate-400 mt-1" x-text="'将「' + (assigningSkill?.name || '') + '」添加给：'"></p>
+        </div>
+        <div class="px-3 py-3 space-y-1 max-h-[320px] overflow-y-auto">
+            <template x-for="emp in assignableEmployees" :key="emp.id">
+                <button type="button"
+                        @click="addSkillToEmployee(assigningSkillId, emp.id)"
+                        :disabled="(emp.skills || []).includes(assigningSkill?.name)"
+                        class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors"
+                        :class="(emp.skills || []).includes(assigningSkill?.name)
+                            ? 'opacity-50 cursor-not-allowed bg-gray-50'
+                            : 'hover:bg-blue-50 cursor-pointer'">
+                    <div class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 text-lg" :class="emp.iconBg">
+                        <span x-text="emp.avatar"></span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium text-slate-700" x-text="emp.name"></p>
+                        <p class="text-[11px] text-slate-400 truncate" x-text="emp.position"></p>
+                    </div>
+                    <span x-show="(emp.skills || []).includes(assigningSkill?.name)"
+                          class="text-[10px] text-slate-400 flex-shrink-0">已有此技能</span>
+                </button>
+            </template>
+        </div>
+        <div class="px-5 py-3 border-t border-gray-100 flex justify-end">
+            <button type="button" @click="showSkillAssignModal = false"
+                    class="px-4 py-1.5 text-sm font-medium text-slate-600 hover:bg-gray-100 rounded-lg transition-colors">
+                取消
+            </button>
+        </div>
     </div>
 </div>
 
@@ -1417,9 +1720,9 @@
                         <div class="bg-white rounded-xl border border-gray-200 p-5">
                             <div class="flex items-center justify-between mb-4">
                                 <h3 class="text-sm font-semibold text-slate-700">专业技能</h3>
-                                <button type="button" @click="showToastMsg('技能库功能建设中')"
+                                <button type="button" @click="currentTab = 'talent-market'; talentMarketTab = 'skills'"
                                         class="text-xs text-blue-600 hover:text-blue-700 font-medium">
-                                    + 添加技能
+                                    + 去市场获取
                                 </button>
                             </div>
                             <div class="grid grid-cols-3 gap-3">
@@ -1553,9 +1856,9 @@
             <div class="flex justify-between items-center mb-4">
                 <input type="search" placeholder="搜索技能…" class="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 w-64">
                 <div class="flex items-center gap-2">
-                    <button type="button" @click="showToastMsg('技能市场功能建设中')"
+                    <button type="button" @click="currentTab = 'talent-market'; talentMarketTab = 'skills'"
                             class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 border border-blue-200 bg-white hover:bg-blue-50 rounded-lg transition-colors">
-                        <i data-lucide="store" class="w-4 h-4"></i> 技能市场
+                        <i data-lucide="store" class="w-4 h-4"></i> 去人才市场
                     </button>
                     <button type="button" @click="showToastMsg('技能上传功能建设中')"
                             class="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors">
@@ -1843,6 +2146,7 @@ function appData() {
         // 导航
         currentTab: 'employees',
         sidebarOpen: true,
+        briefingShown: false,
 
         // 员工数据
         employeeList: [
@@ -1853,6 +2157,8 @@ function appData() {
                 imported: true, callCount: '2,048', totalConversations: 2048, monthlyConversations: 128,
                 avgResponseTime: '1.2s', satisfaction: '99%',
                 tokenTotal: 1280000, tokenMonth: 86400, tokenToday: 3200,
+                onlineStatus: 'idle',
+                activeSessions: [],
                 skills: ['信息整理', '问题分析', '文档起草', '任务调度'], tools: ['web_search', 'docx_writer', 'excel_generator'],
                 skillCards: [
                     { name: '帮我整理信息', desc: '粘贴内容或上传文件，快速提炼关键要点', icon: 'layers', iconBg: 'bg-blue-100', iconColor: 'text-blue-600', prompt: '帮我整理一下这些信息' },
@@ -1878,6 +2184,13 @@ function appData() {
                 imported: true, callCount: '856', totalConversations: 856, monthlyConversations: 34,
                 avgResponseTime: '1.8s', satisfaction: '96%',
                 tokenTotal: 524000, tokenMonth: 34200, tokenToday: 1800,
+                completedToday: 1,
+                onlineStatus: 'active',
+                activeSessions: [
+                    { id: 'sess-star-0', title: '用户画像分析报告', status: 'completed', startedAt: Date.now() - 1000 * 60 * 25, completedAt: Date.now() - 1000 * 60 * 5 },
+                    { id: 'sess-star-1', title: '周报汇总 & 数据分析', status: 'running', startedAt: Date.now() - 1000 * 60 * 2 },
+                    { id: 'sess-star-2', title: '竞品调研 Q2', status: 'running', startedAt: Date.now() - 1000 * 60 * 8 },
+                ],
                 skills: ['需求分析', '竞品调研', '数据整理'], tools: ['web_search', 'excel_generator'],
                 skillCards: [
                     { name: '需求分析', desc: '整理产品需求文档，梳理用户故事和优先级', icon: 'clipboard-list', iconBg: 'bg-amber-100', iconColor: 'text-amber-600', prompt: '帮我分析一下这个需求' },
@@ -1898,9 +2211,10 @@ function appData() {
                     { name: 'AIOS需求整理.md', icon: 'file', iconColor: 'text-slate-400', updatedAt: '03-18 09:14' },
                 ],
                 conversations: [
-                    { id: 10, title: '产品需求分析讨论', updatedAt: '2024-03-20', messageCount: 12, duration: '15分钟' },
-                    { id: 11, title: '竞品调研报告', updatedAt: '2024-03-18', messageCount: 8, duration: '10分钟' },
-                    { id: 12, title: '首次对话', updatedAt: '2024-03-15', messageCount: 5, duration: '3分钟' },
+                    { id: 10, title: '周报汇总 & 数据分析', updatedAt: '刚刚', messageCount: 4, duration: '2分钟', active: true, sessionId: 'sess-star-1' },
+                    { id: 11, title: '竞品调研 Q2', updatedAt: '8分钟前', messageCount: 3, duration: '8分钟', active: true, sessionId: 'sess-star-2' },
+                    { id: 12, title: '产品需求分析讨论', updatedAt: '2024-03-20', messageCount: 12, duration: '15分钟' },
+                    { id: 13, title: '竞品调研报告', updatedAt: '2024-03-18', messageCount: 8, duration: '10分钟' },
                 ],
             },
             {
@@ -1910,6 +2224,13 @@ function appData() {
                 imported: true, callCount: '1,234', totalConversations: 1234, monthlyConversations: 56,
                 avgResponseTime: '2.3s', satisfaction: '98%',
                 tokenTotal: 892000, tokenMonth: 56100, tokenToday: 2400,
+                completedToday: 2,
+                onlineStatus: 'active',
+                activeSessions: [
+                    { id: 'sess-dev-0', title: '前端架构重构方案', status: 'completed', startedAt: Date.now() - 1000 * 60 * 45, completedAt: Date.now() - 1000 * 60 * 10 },
+                    { id: 'sess-dev-1', title: 'API 接口设计文档', status: 'completed', startedAt: Date.now() - 1000 * 60 * 30, completedAt: Date.now() - 1000 * 60 * 8 },
+                    { id: 'sess-dev-2', title: 'PR #42 代码审查', status: 'running', startedAt: Date.now() - 1000 * 60 * 15 },
+                ],
                 skills: ['代码审查', '文档生成', 'API设计'], tools: ['docx_writer', 'web_search'],
                 skillCards: [
                     { name: '代码审查', desc: '粘贴代码，帮你找 Bug、优化逻辑和性能问题', icon: 'git-pull-request', iconBg: 'bg-blue-100', iconColor: 'text-blue-600', prompt: '帮我审查这段代码' },
@@ -1929,9 +2250,9 @@ function appData() {
                     { name: 'api-spec-v2.yaml', icon: 'code-2', iconColor: 'text-blue-400', updatedAt: '03-18 15:22' },
                 ],
                 conversations: [
-                    { id: 1, title: '前端架构重构方案', updatedAt: '2024-03-20', messageCount: 12, duration: '15分钟' },
-                    { id: 2, title: 'API 接口设计讨论', updatedAt: '2024-03-18', messageCount: 8, duration: '10分钟' },
-                    { id: 3, title: '首次对话', updatedAt: '2024-01-15', messageCount: 5, duration: '3分钟' },
+                    { id: 1, title: '前端架构重构方案', updatedAt: '10分钟前', messageCount: 12, duration: '45分钟', active: false, sessionId: 'sess-dev-0' },
+                    { id: 2, title: 'API 接口设计文档', updatedAt: '8分钟前', messageCount: 8, duration: '22分钟', active: false, sessionId: 'sess-dev-1' },
+                    { id: 3, title: 'PR #42 代码审查', updatedAt: '15分钟前', messageCount: 6, duration: '15分钟', active: true, sessionId: 'sess-dev-2' },
                 ],
             },
             {
@@ -1941,6 +2262,9 @@ function appData() {
                 imported: true, callCount: '567', totalConversations: 567, monthlyConversations: 23,
                 avgResponseTime: '1.5s', satisfaction: '99%',
                 tokenTotal: 312000, tokenMonth: 21800, tokenToday: 950,
+                completedToday: 0,
+                onlineStatus: 'idle',
+                activeSessions: [],
                 skills: ['多语种翻译', '术语库管理'], tools: ['web_search'],
                 skillCards: [
                     { name: '文档翻译', desc: '上传文档，支持中英日韩多语种互译', icon: 'languages', iconBg: 'bg-green-100', iconColor: 'text-green-600', prompt: '帮我翻译这份文档' },
@@ -1966,6 +2290,9 @@ function appData() {
                 imported: false, callCount: '342', totalConversations: 342, monthlyConversations: 15,
                 avgResponseTime: '2.1s', satisfaction: '94%',
                 tokenTotal: 198000, tokenMonth: 14500, tokenToday: 620,
+                completedToday: 0,
+                onlineStatus: 'idle',
+                activeSessions: [],
                 skills: ['文案创作', '内容策划'], tools: ['web_search'],
                 skillCards: [
                     { name: '小红书文案', desc: '输入主题，生成爆款风格的小红书笔记', icon: 'sparkles', iconBg: 'bg-pink-100', iconColor: 'text-pink-600', prompt: '帮我写一篇小红书文案' },
@@ -1991,6 +2318,9 @@ function appData() {
                 imported: false, callCount: '156', totalConversations: 156, monthlyConversations: 8,
                 avgResponseTime: '3.2s', satisfaction: '92%',
                 tokenTotal: 87000, tokenMonth: 8200, tokenToday: 310,
+                completedToday: 0,
+                onlineStatus: 'idle',
+                activeSessions: [],
                 skills: ['数据分析', 'Excel生成', 'SQL查询'], tools: ['excel_generator', 'web_search'],
                 skillCards: [
                     { name: '数据分析', desc: '上传 Excel 数据，自动分析并制作可视化图表', icon: 'bar-chart-2', iconBg: 'bg-violet-100', iconColor: 'text-violet-600', prompt: '帮我分析这份数据' },
@@ -2066,12 +2396,25 @@ function appData() {
             { id: 7, name: 'Git 提交监控', agentId: 'emp-dev', agentName: '阿码', type: 'heartbeat', enabled: false, desc: '检测到代码提交时自动执行审查', trigger: 'Git Push 事件', interval: '实时监听', lastStatus: '未启用', lastRun: '—' },
         ],
 
-        // 员工市场
+        // 员工管理
         marketTab: 'mine',
         marketSearch: '',
         marketCategory: '全部',
-        showEmployeePreviewModal: false,
-        previewEmployeeId: null,
+
+        // 人才市场
+        talentMarketTab: 'recruit',   // 'recruit' | 'skills'
+        talentMarketSearch: '',
+        talentMarketCategory: '全部',
+        showSkillAssignModal: false,
+        assigningSkillId: null,
+        marketSkillList: [
+            { id: 'ms-1', name: '小红书文案创作', icon: '✍️', desc: '生成符合小红书风格的种草文案，包含标题、正文、话题标签', category: '创作', source: '官方', usageCount: 856 },
+            { id: 'ms-2', name: '代码审查', icon: '🔍', desc: '自动审查代码质量，发现潜在Bug和性能问题，提供改进建议', category: '开发', source: '官方', usageCount: 1234 },
+            { id: 'ms-3', name: '数据报表生成', icon: '📊', desc: '根据原始数据自动生成结构化分析报告和可视化图表', category: '分析', source: '官方', usageCount: 567 },
+            { id: 'ms-4', name: '多语种翻译', icon: '🌐', desc: '支持中英日韩多语种互译，保持专业术语一致性', category: '翻译', source: '官方', usageCount: 423 },
+            { id: 'ms-5', name: '会议纪要整理', icon: '📝', desc: '将会议录音或文字整理为结构化纪要，提取行动项和关键决策', category: '效率', source: '官方', usageCount: 678 },
+            { id: 'ms-6', name: '竞品分析', icon: '🏆', desc: '多维度竞品对比分析，生成SWOT矩阵和差异化建议', category: '分析', source: '官方', usageCount: 345 },
+        ],
 
         // 设置
         settingsTab: 'skills',
@@ -2121,16 +2464,43 @@ function appData() {
         get selectedEmployeeConversations() {
             if (!this.selectedEmployee) return [];
             const convs = this.selectedEmployee.conversations || [];
-            if (!this.conversationSearch) return convs;
-            return convs.filter(c => c.title.includes(this.conversationSearch));
+            const filtered = this.conversationSearch
+                ? convs.filter(c => c.title.includes(this.conversationSearch))
+                : convs;
+            // Active conversations first, then sorted by recency
+            return [...filtered].sort((a, b) => {
+                if (a.active && !b.active) return -1;
+                if (!a.active && b.active) return 1;
+                return 0;
+            });
         },
         get filteredMarketEmployees() {
             return this.employeeList.filter(e => {
-                const matchTab = this.marketTab === 'mine' ? (e.imported || e.type === 'custom') : !e.imported && e.type === 'builtin';
-                const matchCat = this.marketCategory === '全部' || e.category === this.marketCategory;
+                const matchTab = e.imported || e.type === 'custom';
                 const matchSearch = !this.marketSearch || e.name.includes(this.marketSearch) || e.position.includes(this.marketSearch);
-                return matchTab && matchCat && matchSearch;
+                return matchTab && matchSearch;
             });
+        },
+        get filteredTalentEmployees() {
+            return this.employeeList.filter(e => {
+                const isAvailable = !e.imported && e.type === 'builtin';
+                const matchCat = this.talentMarketCategory === '全部' || e.category === this.talentMarketCategory;
+                const matchSearch = !this.talentMarketSearch || e.name.includes(this.talentMarketSearch) || e.position.includes(this.talentMarketSearch);
+                return isAvailable && matchCat && matchSearch;
+            });
+        },
+        get filteredMarketSkills() {
+            return this.marketSkillList.filter(s => {
+                const matchCat = this.talentMarketCategory === '全部' || s.category === this.talentMarketCategory;
+                const matchSearch = !this.talentMarketSearch || s.name.includes(this.talentMarketSearch) || s.desc.includes(this.talentMarketSearch);
+                return matchCat && matchSearch;
+            });
+        },
+        get assigningSkill() {
+            return this.marketSkillList.find(s => s.id === this.assigningSkillId) || null;
+        },
+        get assignableEmployees() {
+            return this.employeeList.filter(e => e.imported || e.type === 'custom');
         },
         get atFilteredAgents() {
             const others = this.employeeList.filter(e => e.id !== this.selectedEmployeeId && (e.imported || e.type === 'custom'));
@@ -2212,9 +2582,36 @@ function appData() {
         },
         getEmployeeVibe(emp) {
             if (!emp) return '';
-            const now = Date.now();
-            const diff = now - (emp.lastActiveTime || 0);
-            return diff < 1000 * 60 * 60 ? emp.vibe : emp.vibeIdle;
+            const running = (emp.activeSessions || []).filter(s => s.status === 'running');
+            if (running.length > 0) {
+                // Most recently started running session
+                running.sort((a, b) => b.startedAt - a.startedAt);
+                return '🔥 ' + running[0].title + '…';
+            }
+            const waiting = (emp.activeSessions || []).filter(s => s.status === 'waiting');
+            if (waiting.length > 0) return '⏳ 任务排队中…';
+            return emp.vibeIdle || emp.vibe || '';
+        },
+        getDotColor(emp) {
+            if (!emp) return '#94a3b8';
+            if (emp.onlineStatus === 'error') return '#ef4444';
+            if ((emp.activeSessions || []).some(s => s.status === 'running')) return '#22c55e';
+            if ((emp.activeSessions || []).some(s => s.status === 'waiting')) return '#f59e0b';
+            return '#94a3b8';
+        },
+        getActiveSessionCount(emp) {
+            if (!emp) return 0;
+            return (emp.activeSessions || []).filter(s => s.status === 'running' || s.status === 'waiting').length;
+        },
+        getBriefingLines() {
+            return this.employeeList
+                .filter(e => e.type !== 'default' && (e.activeSessions || []).length > 0)
+                .map(e => ({
+                    empName: e.name,
+                    avatar: e.avatar,
+                    iconBg: e.iconBg,
+                    lines: (e.activeSessions || []).map(s => ({ title: s.title, status: s.status }))
+                }));
         },
         goToDetail(employeeId) {
             this.detailEmployeeId = employeeId;
@@ -2282,6 +2679,10 @@ function appData() {
             this.showAtPanel = false;
         },
         handleAtInput(event) {
+            // 只有默认员工（type='default'）可以使用@调度功能
+            if (this.selectedEmployee?.type !== 'default') {
+                return;
+            }
             const val = event.target.value;
             const atIdx = val.lastIndexOf('@');
             if (atIdx !== -1) {
@@ -2308,10 +2709,30 @@ function appData() {
         },
         importEmployee(id) {
             const emp = this.employeeList.find(e => e.id === id);
-            if (emp) {
-                emp.imported = true;
-                this.showToastMsg('已引入 ' + emp.name + ' ✓');
+            if (!emp) return;
+            if (emp.imported) {
+                this.showToastMsg(emp.name + ' 已在你的团队中');
+                return;
             }
+            emp.imported = true;
+            this.showToastMsg(emp.name + ' 已加入你的团队 ✓');
+        },
+        openSkillAssignModal(skillId) {
+            this.assigningSkillId = skillId;
+            this.showSkillAssignModal = true;
+        },
+        addSkillToEmployee(skillId, employeeId) {
+            const skill = this.marketSkillList.find(s => s.id === skillId);
+            const emp = this.employeeList.find(e => e.id === employeeId);
+            if (!skill || !emp) return;
+            if ((emp.skills || []).includes(skill.name)) {
+                this.showToastMsg(emp.name + ' 已拥有「' + skill.name + '」技能');
+                return;
+            }
+            emp.skills = [...(emp.skills || []), skill.name];
+            this.showSkillAssignModal = false;
+            this.assigningSkillId = null;
+            this.showToastMsg('「' + skill.name + '」已添加到 ' + emp.name + ' ✓');
         },
         createEmployee() {
             if (this.isCreating) return;
